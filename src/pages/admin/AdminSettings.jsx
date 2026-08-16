@@ -4,7 +4,7 @@ import { useToast, Header } from '../../components/UI'
 import { fmt } from '../../lib/points'
 import Icon from '../../components/Icons'
 
-export default function AdminSettings({ back }) {
+export default function AdminSettings({ back, embedded }) {
   const toast = useToast()
   const [s, setS] = useState(null)
 
@@ -24,7 +24,7 @@ export default function AdminSettings({ back }) {
 
   return (
     <div className="page">
-      <Header title="الإعدادات" back={back} />
+      {!embedded && <Header title="الإعدادات" back={back} />}
 
       <div className="card" style={{ marginBottom: 14 }}>
         <h3 className="section-title" style={{ marginTop: 0 }}>معلومات الخلوة</h3>

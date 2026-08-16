@@ -5,7 +5,7 @@ import { useToast, Modal, Header } from '../../components/UI'
 import QrCard from '../../components/QrCard'
 import Icon from '../../components/Icons'
 
-export default function AdminParticipants({ back }) {
+export default function AdminParticipants({ back, embedded }) {
   const { teams, participants } = useData()
   const toast = useToast()
   const [edit, setEdit] = useState(null)
@@ -68,40 +68,88 @@ export default function AdminParticipants({ back }) {
 
   return (
     <div className="page">
-      <Header title="المخدومين والكارنيهات" back={back} />
+      {!embedded && <Header title="المخدومين والكارنيهات" back={back} />}
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <button className="btn gold" style={{ flex: 1 }} onClick={() => setEdit({ name: '', teamId: teams[0]?.id || '', phone: '' })}>
-          <Icon name="plus" size={18} /> إضافة
-        </button>
-        <button className="btn" style={{ flex: 1 }} onClick={printAll} disabled={shown.length === 0}>
-          <Icon name="card" size={18} /> طباعة الكارنيهات
-        </button>
-      </div>
+      {embedded ? (
+        <>
+          <div className="adm-toolbar">
+            <input className="grow" placeholder="بحث بالاسم..." value={search} onChange={e => setSearch(e.target.value)} />
+            <select value={filter} onChange={e => setFilter(e.target.value)}>
+              <option value="">كل الفرق</option>
+              {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+            <div className="subtle" style={{ marginInlineEnd: 'auto' }}>{shown.length} مخدوم</div>
+            <button className="btn" onClick={printAll} disabled={shown.length === 0}><Icon name="card" size={16} /> طباعة الكارنيهات</button>
+            <button className="btn gold" onClick={() => setEdit({ name: '', teamId: teams[0]?.id || '', phone: '' })}><Icon name="plus" size={16} /> إضافة مخدوم</button>
+          </div>
 
-      <div className="field"><input placeholder="بحث بالاسم..." value={search} onChange={e => setSearch(e.target.value)} /></div>
-      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginBottom: 12, paddingBottom: 4 }}>
-        <button className="pill" onClick={() => setFilter('')} style={pillStyle(!filter)}>الكل</button>
-        {teams.map(t => <button key={t.id} className="pill" onClick={() => setFilter(t.id)} style={pillStyle(filter === t.id, t.color)}>{t.name}</button>)}
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {shown.map(p => {
-          const t = teamOf(p)
-          return (
-            <div key={p.id} className="card" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, borderInlineStart: `5px solid ${t?.color || 'var(--gold)'}` }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 800 }}>{p.name}</div>
-                <div className="subtle">{t?.name || 'بدون فريق'}</div>
-              </div>
-              <button className="btn ghost" style={{ padding: '8px' }} onClick={() => setCard(p)}><Icon name="card" size={16} /></button>
-              <button className="btn ghost" style={{ padding: '8px' }} onClick={() => setEdit(p)}><Icon name="edit" size={16} /></button>
-              <button className="btn ghost" style={{ padding: '8px', color: 'var(--red)' }} onClick={() => del(p.id)}><Icon name="trash" size={16} /></button>
+          <div className="adm-panel">
+            <div className="adm-table-wrap">
+              <table className="adm-table">
+                <thead>
+                  <tr><th>#</th><th>الاسم</th><th>الفريق</th><th>الهاتف</th><th style={{ textAlign: 'end' }}>إجراءات</th></tr>
+                </thead>
+                <tbody>
+                  {shown.map((p, i) => {
+                    const t = teamOf(p)
+                    return (
+                      <tr key={p.id}>
+                        <td className="subtle">{i + 1}</td>
+                        <td style={{ fontWeight: 700 }}>{p.name}</td>
+                        <td><span className="pill" style={{ background: (t?.color || 'var(--gold)') + '22', color: t?.color || 'var(--maroon)' }}>{t?.name || 'بدون فريق'}</span></td>
+                        <td className="subtle" style={{ direction: 'ltr', unicodeBidi: 'plaintext' }}>{p.phone || '—'}</td>
+                        <td>
+                          <div className="row-actions">
+                            <button className="btn ghost" style={{ padding: '6px 8px' }} onClick={() => setCard(p)} title="الكارنيه"><Icon name="card" size={16} /></button>
+                            <button className="btn ghost" style={{ padding: '6px 8px' }} onClick={() => setEdit(p)} title="تعديل"><Icon name="edit" size={16} /></button>
+                            <button className="btn ghost" style={{ padding: '6px 8px', color: 'var(--red)' }} onClick={() => del(p.id)} title="حذف"><Icon name="trash" size={16} /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  {shown.length === 0 && <tr><td colSpan={5}><div className="empty">لا يوجد مخدومين — اضغط إضافة</div></td></tr>}
+                </tbody>
+              </table>
             </div>
-          )
-        })}
-        {shown.length === 0 && <div className="empty">لا يوجد مخدومين — اضغط إضافة</div>}
-      </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            <button className="btn gold" style={{ flex: 1 }} onClick={() => setEdit({ name: '', teamId: teams[0]?.id || '', phone: '' })}>
+              <Icon name="plus" size={18} /> إضافة
+            </button>
+            <button className="btn" style={{ flex: 1 }} onClick={printAll} disabled={shown.length === 0}>
+              <Icon name="card" size={18} /> طباعة الكارنيهات
+            </button>
+          </div>
+
+          <div className="field"><input placeholder="بحث بالاسم..." value={search} onChange={e => setSearch(e.target.value)} /></div>
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginBottom: 12, paddingBottom: 4 }}>
+            <button className="pill" onClick={() => setFilter('')} style={pillStyle(!filter)}>الكل</button>
+            {teams.map(t => <button key={t.id} className="pill" onClick={() => setFilter(t.id)} style={pillStyle(filter === t.id, t.color)}>{t.name}</button>)}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {shown.map(p => {
+              const t = teamOf(p)
+              return (
+                <div key={p.id} className="card" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, borderInlineStart: `5px solid ${t?.color || 'var(--gold)'}` }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 800 }}>{p.name}</div>
+                    <div className="subtle">{t?.name || 'بدون فريق'}</div>
+                  </div>
+                  <button className="btn ghost" style={{ padding: '8px' }} onClick={() => setCard(p)}><Icon name="card" size={16} /></button>
+                  <button className="btn ghost" style={{ padding: '8px' }} onClick={() => setEdit(p)}><Icon name="edit" size={16} /></button>
+                  <button className="btn ghost" style={{ padding: '8px', color: 'var(--red)' }} onClick={() => del(p.id)}><Icon name="trash" size={16} /></button>
+                </div>
+              )
+            })}
+            {shown.length === 0 && <div className="empty">لا يوجد مخدومين — اضغط إضافة</div>}
+          </div>
+        </>
+      )}
 
       {edit && (
         <Modal title={edit.id ? 'تعديل مخدوم' : 'إضافة مخدوم'} onClose={() => setEdit(null)}>

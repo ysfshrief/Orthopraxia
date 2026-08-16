@@ -4,7 +4,7 @@ import { upsert, create, remove } from '../../lib/store'
 import { useToast, Modal, Header } from '../../components/UI'
 import Icon from '../../components/Icons'
 
-export default function AdminTeams({ back }) {
+export default function AdminTeams({ back, embedded }) {
   const { teams, participants } = useData()
   const toast = useToast()
   const [edit, setEdit] = useState(null)
@@ -25,7 +25,7 @@ export default function AdminTeams({ back }) {
 
   return (
     <div className="page">
-      <Header title="الفرق" back={back} />
+      {!embedded && <Header title="الفرق" back={back} />}
       <button className="btn gold full" style={{ marginBottom: 14 }} onClick={() => setEdit({ name: '', color: '#8B2E1E', leader: '', order: teams.length + 1, bonusPoints: 0 })}>
         <Icon name="plus" size={18} /> إضافة فريق
       </button>

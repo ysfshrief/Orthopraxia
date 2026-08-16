@@ -10,7 +10,7 @@ import Icon from '../../components/Icons'
   Firebase Cloud Messaging to the matching audience (all / team / urgent).
   See FIREBASE_SETUP.md for the wiring steps.
 */
-export default function AdminNotifications({ back }) {
+export default function AdminNotifications({ back, embedded }) {
   const { teams } = useData()
   const toast = useToast()
   const [items, setItems] = useState([])
@@ -35,7 +35,7 @@ export default function AdminNotifications({ back }) {
 
   return (
     <div className="page">
-      <Header title="الإشعارات" back={back} />
+      {!embedded && <Header title="الإشعارات" back={back} />}
       <button className="btn gold full" style={{ marginBottom: 14 }} onClick={() => setEdit({ title: '', body: '', audience: 'all', teamId: teams[0]?.id || '', urgent: false })}>
         <Icon name="plus" size={18} /> إشعار جديد
       </button>

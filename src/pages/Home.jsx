@@ -89,12 +89,16 @@ export default function Home() {
 
       <footer className="site-footer">
         <div onClick={tapLogo} style={{ cursor: 'pointer', userSelect: 'none', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <img src="/logo-circle.png" alt="" style={{ width: 40, height: 40, borderRadius: '50%' }} />
+          <img src="/logo-circle.png" alt="" style={{ width: 44, height: 44, borderRadius: '50%' }} />
         </div>
         <div className="foot-line" style={{ marginTop: 10, fontWeight: 700 }}>
           كنيسة الملاك الجليل ميخائيل بدمنهور
         </div>
         <div className="foot-line">خدمة الشباب — Sons Of Heaven</div>
+        <div className="foot-divider" />
+        <div className="foot-copy">
+          © {new Date().getFullYear()} جميع الحقوق محفوظة
+        </div>
         <div className="foot-line dev">Developed &amp; designed by: Youssef Shrief</div>
         {isAdmin && (
           <button className="btn ghost" style={{ marginTop: 12, padding: '6px 14px' }} onClick={() => { logout(); toast('تم تسجيل الخروج', 'warn') }}>

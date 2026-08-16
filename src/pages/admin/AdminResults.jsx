@@ -3,7 +3,7 @@ import { subscribe, update, remove } from '../../lib/store'
 import { useToast, Modal, Header } from '../../components/UI'
 import Icon from '../../components/Icons'
 
-export default function AdminResults({ back }) {
+export default function AdminResults({ back, embedded }) {
   const toast = useToast()
   const [results, setResults] = useState([])
   const [edit, setEdit] = useState(null)
@@ -22,7 +22,7 @@ export default function AdminResults({ back }) {
 
   return (
     <div className="page">
-      <Header title="الحضور والنقاط" back={back} />
+      {!embedded && <Header title="الحضور والنقاط" back={back} />}
       <p className="subtle" style={{ marginBottom: 12 }}>تعديل وقت/نقاط الحضور من صلاحيات الأدمن فقط.</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {results.map(r => (
