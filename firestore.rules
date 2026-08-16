@@ -1,0 +1,11 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // القراءة متاحة للجميع (موقع عام). الكتابة تتم من التطبيق.
+    // للإنتاج يفضّل ربط الكتابة بحساب Admin عبر Firebase Auth.
+    match /{document=**} {
+      allow read: if true;
+      allow write: if true;
+    }
+  }
+}
