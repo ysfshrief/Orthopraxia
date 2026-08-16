@@ -1,8 +1,11 @@
 import { useNavigate } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { subscribe } from '../lib/store'
 import { useData } from '../context/DataContext'
 import { useAuth } from '../context/AuthContext'
+import { useParticipant } from '../context/ParticipantContext'
 import { useToast, Modal } from '../components/UI'
+import Countdown from '../components/Countdown'
 import Icon from '../components/Icons'
 
 const quick = [
@@ -10,18 +13,23 @@ const quick = [
   { to: '/leaderboard', icon: 'trophy', label: 'النتائج', c: 'var(--gold)' },
   { to: '/videos', icon: 'video', label: 'الفيديوهات', c: 'var(--green)' },
   { to: '/competition', icon: 'quiz', label: 'المسابقة', c: '#3A5A78' },
-  { to: '/audio', icon: 'music', label: 'الصلاة والتسبحة', c: '#8B4A9E' },
-  { to: '/scan', icon: 'scan', label: 'تسجيل الحضور', c: 'var(--maroon-2)' },
+  { to: '/audio', icon: 'music', label: 'الصلاة والترانيم', c: '#8B4A9E' },
 ]
 
 export default function Home() {
   const nav = useNavigate()
   const { settings } = useData()
   const { isAdmin, login, logout } = useAuth()
+  const { participantId } = useParticipant()
   const toast = useToast()
+  const [program, setProgram] = useState([])
   const [taps, setTaps] = useState(0)
   const [showLogin, setShowLogin] = useState(false)
   const [pw, setPw] = useState('')
+
+  useEffect(() => subscribe('program', arr => {
+    arr.sort((a, b) => (a.order || 0) - (b.order || 0)); setProgram(arr)
+  }), [])
 
   const tapLogo = () => {
     if (isAdmin) return
@@ -36,61 +44,64 @@ export default function Home() {
   const doLogin = () => {
     if (login(pw, settings.adminPassword)) {
       toast('تم تسجيل الدخول كأدمن', 'ok')
-      setShowLogin(false); setPw('')
-      nav('/admin')
-    } else {
-      toast('كلمة المرور غير صحيحة', 'err')
-    }
+      setShowLogin(false); setPw(''); nav('/admin')
+    } else toast('كلمة المرور غير صحيحة', 'err')
   }
 
   return (
     <div className="page">
-      <div className="center-col" style={{ paddingTop: 8 }}>
-        <div style={{
-          width: 168, height: 168, borderRadius: '50%',
-          background: 'radial-gradient(circle at 50% 40%, #fff7e8, transparent 70%)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          animation: 'pop .5s ease'
-        }}>
-          <img src="/logo.png" alt="Orthopraxia" style={{ width: 150, height: 150, objectFit: 'contain', filter: 'drop-shadow(0 8px 20px rgba(107,35,24,.25))' }} />
+      <div className="center-col" style={{ paddingTop: 6 }}>
+        <div className="logo-ring">
+          <img src="/logo-circle.png" alt="Orthopraxia" />
         </div>
-        <h1 style={{ margin: '10px 0 2px', color: 'var(--maroon)', fontSize: 30, letterSpacing: '.5px' }}>
-          {settings.retreatName}
-        </h1>
-        <div className="pill" style={{ background: 'rgba(201,154,58,.2)', color: 'var(--maroon)' }}>
-          {settings.subtitle}
-        </div>
-        <p className="subtle" style={{ marginTop: 12, lineHeight: 1.7, maxWidth: 420 }}>
-          {settings.about}
-        </p>
+        <h1 style={{ margin: '12px 0 2px', color: 'var(--maroon)', fontSize: 30 }}>{settings.retreatName}</h1>
+        <div className="pill" style={{ background: 'rgba(201,154,58,.2)', color: 'var(--maroon)' }}>{settings.subtitle}</div>
       </div>
 
-      <h3 className="section-title" style={{ marginTop: 20 }}>الوصول السريع</h3>
+      <div style={{ marginTop: 18 }}>
+        <Countdown program={program} />
+      </div>
+
+      <p className="subtle" style={{ marginTop: 14, lineHeight: 1.7, textAlign: 'center' }}>{settings.about}</p>
+
+      {!participantId ? (
+        <button className="btn gold full" style={{ marginTop: 16 }} onClick={() => nav('/login')}>
+          <Icon name="scan" size={18} /> تسجيل الدخول بالكارنيه
+        </button>
+      ) : (
+        <button className="btn full" style={{ marginTop: 16 }} onClick={() => nav('/me')}>
+          <Icon name="users" size={18} /> حسابي وفريقي
+        </button>
+      )}
+
+      <h3 className="section-title" style={{ marginTop: 22 }}>الوصول السريع</h3>
       <div className="grid2">
         {quick.map(q => (
           <button key={q.to} className="card" onClick={() => nav(q.to)}
             style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10, border: 'none', textAlign: 'right' }}>
-            <span style={{
-              width: 44, height: 44, borderRadius: 12, display: 'grid', placeItems: 'center',
-              background: q.c, color: '#fff'
-            }}><Icon name={q.icon} size={22} /></span>
-            <span style={{ fontWeight: 800, color: 'var(--ink)' }}>{q.label}</span>
+            <span style={{ width: 44, height: 44, borderRadius: 12, display: 'grid', placeItems: 'center', background: q.c, color: '#fff' }}>
+              <Icon name={q.icon} size={22} />
+            </span>
+            <span style={{ fontWeight: 800 }}>{q.label}</span>
           </button>
         ))}
       </div>
 
-      {/* Footer with hidden admin login */}
-      <div style={{ marginTop: 30, textAlign: 'center', paddingBottom: 8 }}>
-        <div onClick={tapLogo} style={{ cursor: 'pointer', userSelect: 'none' }}>
-          <img src="/logo.png" alt="" style={{ width: 36, height: 36, objectFit: 'contain', opacity: .7, verticalAlign: 'middle' }} />
-          <span className="subtle" style={{ marginInlineStart: 8 }}>Orthopraxia</span>
+      <footer className="site-footer">
+        <div onClick={tapLogo} style={{ cursor: 'pointer', userSelect: 'none', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <img src="/logo-circle.png" alt="" style={{ width: 40, height: 40, borderRadius: '50%' }} />
         </div>
+        <div className="foot-line" style={{ marginTop: 10, fontWeight: 700 }}>
+          كنيسة الملاك الجليل ميخائيل بدمنهور
+        </div>
+        <div className="foot-line">خدمة الشباب — Sons Of Heaven</div>
+        <div className="foot-line dev">Developed &amp; designed by: Youssef Shrief</div>
         {isAdmin && (
-          <button className="btn ghost" style={{ marginTop: 10, padding: '6px 14px' }} onClick={() => { logout(); toast('تم تسجيل الخروج', 'warn') }}>
+          <button className="btn ghost" style={{ marginTop: 12, padding: '6px 14px' }} onClick={() => { logout(); toast('تم تسجيل الخروج', 'warn') }}>
             <Icon name="logout" size={16} /> خروج الأدمن
           </button>
         )}
-      </div>
+      </footer>
 
       {showLogin && (
         <Modal title="دخول الأدمن" onClose={() => setShowLogin(false)}>

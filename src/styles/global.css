@@ -115,3 +115,47 @@ input, select, textarea { font-family: inherit; font-size: 16px; }
 @keyframes spin { to { transform: rotate(360deg) } }
 
 .empty { text-align:center; color: var(--muted); padding: 30px 10px; }
+
+/* ---- circular logo ring ---- */
+.logo-ring {
+  width: 168px; height: 168px; border-radius: 50%;
+  padding: 6px;
+  background: conic-gradient(from 0deg, var(--gold), var(--maroon-2), var(--gold-2), var(--maroon), var(--gold));
+  box-shadow: 0 10px 30px rgba(107,35,24,.28);
+  animation: pop .5s ease, spin-slow 18s linear infinite;
+}
+.logo-ring img {
+  width: 100%; height: 100%; border-radius: 50%; object-fit: cover;
+  display: block; background: var(--white);
+  animation: spin-slow-rev 18s linear infinite; /* keep image upright */
+}
+@keyframes spin-slow { to { transform: rotate(360deg) } }
+@keyframes spin-slow-rev { to { transform: rotate(-360deg) } }
+
+/* ---- countdown ---- */
+.countdown-banner {
+  background: linear-gradient(135deg, var(--maroon), var(--maroon-2));
+  color: var(--white); border-radius: var(--radius);
+  padding: 16px; text-align: center; box-shadow: var(--shadow-lg);
+  border: 1px solid rgba(201,154,58,.4);
+}
+.countdown-banner.live { background: linear-gradient(135deg, #4f8062, var(--green)); }
+.countdown-banner.done { background: linear-gradient(135deg, #6a5140, #4a3a2e); }
+.cd-label { font-size: 13px; opacity: .9; margin-bottom: 12px; font-weight: 600; }
+.cd-grid { display: flex; justify-content: center; gap: 10px; }
+.cd-unit {
+  background: rgba(255,255,255,.14); border-radius: 14px; padding: 10px 8px;
+  min-width: 66px; backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,.15);
+}
+.cd-num { font-size: 30px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; direction: ltr; }
+.cd-unit-l { font-size: 11px; opacity: .85; margin-top: 6px; }
+.cd-msg { font-size: 22px; font-weight: 900; }
+.cd-sub { font-size: 14px; opacity: .92; margin-top: 6px; }
+
+/* ---- footer ---- */
+.site-footer {
+  margin-top: 34px; padding: 22px 12px 10px; text-align: center;
+  border-top: 1px solid rgba(201,154,58,.35);
+}
+.foot-line { font-size: 13px; color: var(--maroon); line-height: 1.9; }
+.foot-line.dev { color: var(--muted); font-size: 12px; margin-top: 6px; direction: ltr; }

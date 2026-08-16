@@ -48,6 +48,16 @@ export default function Admin() {
         <Stat label="إجمالي نقاط الحضور" value={results.reduce((s, r) => s + (r.points || 0), 0)} c="#3A5A78" />
       </div>
 
+      <a className="card" href="#/organizer" style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16, border: '2px solid var(--maroon)', textDecoration: 'none' }}>
+        <span style={{ width: 42, height: 42, borderRadius: 12, background: 'var(--maroon)', color: '#fff', display: 'grid', placeItems: 'center' }}>
+          <Icon name="scan" size={22} />
+        </span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 800, color: 'var(--maroon)' }}>ماسح الحضور (للمنظم)</div>
+          <div className="subtle">الرابط الخاص: <span style={{ direction: 'ltr', unicodeBidi: 'plaintext' }}>#/organizer</span></div>
+        </div>
+      </a>
+
       <h3 className="section-title">الإدارة</h3>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {SECTIONS.map(s => (

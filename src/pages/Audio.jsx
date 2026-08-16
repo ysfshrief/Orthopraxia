@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { useToast, Modal, Header } from '../components/UI'
 import Icon from '../components/Icons'
 
-const TYPES = ['صلاة', 'لحن', 'ترنيمة', 'أخرى']
+const TYPES = ['صلاة', 'ترنيمة', 'لحن', 'أخرى']
 const typeColor = { 'صلاة': 'var(--maroon)', 'لحن': 'var(--gold)', 'ترنيمة': 'var(--green)', 'أخرى': '#3A5A78' }
 
 export default function Audio() {
@@ -29,7 +29,7 @@ export default function Audio() {
 
   return (
     <div className="page">
-      <Header title="الصلاة والتسبحة" />
+      <Header title="الصلاة والترانيم" />
       {isAdmin && (
         <button className="btn gold full" style={{ marginBottom: 14 }} onClick={() => setEdit({ name: '', type: 'صلاة', url: '', order: items.length + 1 })}>
           <Icon name="plus" size={18} /> إضافة عنصر
