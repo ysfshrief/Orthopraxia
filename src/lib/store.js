@@ -1,7 +1,7 @@
 import { DEMO_MODE, db } from './firebase'
 import {
   collection, doc, getDocs, getDoc, setDoc, updateDoc,
-  deleteDoc, onSnapshot, query, writeBatch
+  deleteDoc, onSnapshot, query, where, writeBatch
 } from 'firebase/firestore'
 import { SEED } from './seed'
 
@@ -9,8 +9,6 @@ import { SEED } from './seed'
   Unified data layer.
   - Firebase mode: real Firestore collections.
   - Demo mode: localStorage, same API shape, so the whole UI is identical.
-  Collections: settings(doc:main), program, teams, participants,
-               attendanceResults, videos, competitions, audio, notifications
 */
 
 const LS_PREFIX = 'ortho:'
@@ -46,7 +44,7 @@ export async function ensureSeed() {
     }
     return
   }
-  // Firebase: seed only if empty
+  // Firebase: seed only if settings doc is missing
   const settingsRef = doc(db, 'settings', 'main')
   const snap = await getDoc(settingsRef)
   if (!snap.exists()) {
@@ -57,6 +55,67 @@ export async function ensureSeed() {
     ;(SEED.participants || []).forEach(p => batch.set(doc(db, 'participants', p.id), p))
     await batch.commit()
   }
+}
+
+/*
+  Force re-seed: updates teams + seeds participants that don't exist yet.
+  Called from Admin Settings "تحديث البيانات" button.
+  Does NOT delete existing data — only upserts.
+*/
+export async function forceSeed() {
+  if (DEMO_MODE) {
+    lsSet('teams', SEED.teams.map(t => ({ ...t })))
+    const existing = lsGet('participants')
+    const existingIds = new Set(existing.map(p => p.id))
+    const toAdd = (SEED.participants || []).filter(p => !existingIds.has(p.id))
+    lsSet('participants', [...existing, ...toAdd])
+    lsSet('settings', [SEED.settings])
+    return
+  }
+  const batch = writeBatch(db)
+  // update settings (merge)
+  batch.set(doc(db, 'settings', 'main'), SEED.settings, { merge: true })
+  // upsert teams
+  SEED.teams.forEach(t => batch.set(doc(db, 'teams', t.id), t))
+  // add participants that don't exist
+  const pSnap = await getDocs(collection(db, 'participants'))
+  const existingIds = new Set()
+  pSnap.docs.forEach(d => {
+    const data = d.data()
+    existingIds.add(d.id)
+    if (data.id) existingIds.add(data.id)
+  })
+  ;(SEED.participants || []).forEach(p => {
+    if (!existingIds.has(p.id)) {
+      batch.set(doc(db, 'participants', p.id), p)
+    }
+  })
+  await batch.commit()
+}
+
+/*
+  Migrate legacy documents: old code used addDoc (random Firestore ID)
+  but stored our id as a field. This re-creates them with id = doc ID
+  and deletes the orphaned random-ID docs.
+*/
+export async function migrateLegacyDocs(col) {
+  if (DEMO_MODE) return 0
+  const snap = await getDocs(collection(db, col))
+  let migrated = 0
+  const batch = writeBatch(db)
+  snap.docs.forEach(d => {
+    const data = d.data()
+    // if the Firestore doc ID differs from the data.id field, it's legacy
+    if (data.id && d.id !== data.id) {
+      // re-create at the correct path
+      batch.set(doc(db, col, data.id), data)
+      // delete the old random-ID doc
+      batch.delete(d.ref)
+      migrated++
+    }
+  })
+  if (migrated > 0) await batch.commit()
+  return migrated
 }
 
 // ---------------- generic list ops ----------------
@@ -80,8 +139,6 @@ export function subscribe(col, cb) {
 }
 
 export async function create(col, data) {
-  // Always use our own ID as the Firestore document ID so that
-  // remove(col, id) targets the correct path (fixes delete bug).
   const id = data.id || uid()
   if (DEMO_MODE) {
     const arr = lsGet(col)
@@ -117,7 +174,18 @@ export async function remove(col, id) {
   if (DEMO_MODE) {
     lsSet(col, lsGet(col).filter(x => x.id !== id)); return
   }
-  await deleteDoc(doc(db, col, id))
+  // Try direct path first (new-style docs)
+  const ref = doc(db, col, id)
+  const snap = await getDoc(ref)
+  if (snap.exists()) {
+    await deleteDoc(ref); return
+  }
+  // Fallback: find by 'id' field (legacy docs created with addDoc)
+  const q = query(collection(db, col), where('id', '==', id))
+  const qSnap = await getDocs(q)
+  for (const d of qSnap.docs) {
+    await deleteDoc(d.ref)
+  }
 }
 
 // ---------------- settings (single doc) ----------------

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { subscribeSettings, saveSettings } from '../../lib/store'
+import { subscribeSettings, saveSettings, forceSeed, migrateLegacyDocs } from '../../lib/store'
 import { useToast, Header } from '../../components/UI'
 import { fmt } from '../../lib/points'
 import Icon from '../../components/Icons'
@@ -7,6 +7,7 @@ import Icon from '../../components/Icons'
 export default function AdminSettings({ back, embedded }) {
   const toast = useToast()
   const [s, setS] = useState(null)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => subscribeSettings(setS), [])
   if (!s) return <div className="page"><Header title="الإعدادات" back={back} /><div className="empty"><div className="spinner" /></div></div>
@@ -67,6 +68,37 @@ export default function AdminSettings({ back, embedded }) {
           <div className="field"><label>كلمة المرور</label><input value={s.adminPassword} onChange={e => set({ adminPassword: e.target.value })} /></div>
           <div className="field"><label>عدد الضغطات على اللوجو</label><input type="number" value={s.adminTapCount} onChange={e => set({ adminTapCount: Number(e.target.value) })} /></div>
         </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 14, border: '2px solid var(--maroon)' }}>
+        <h3 className="section-title" style={{ marginTop: 0 }}>تحديث بيانات النظام</h3>
+        <p className="subtle" style={{ marginBottom: 12 }}>
+          اضغط لتحديث أسماء وألوان الفرق وإضافة أعضاء دياكونيا من الملف.
+          لن يتم حذف أي بيانات موجودة — فقط إضافة وتحديث.
+        </p>
+        <button className="btn gold full" style={{ marginBottom: 10 }} disabled={loading}
+          onClick={async () => {
+            setLoading(true)
+            try {
+              await forceSeed()
+              toast('✓ تم تحديث الفرق والبيانات بنجاح — أعد تحميل الصفحة', 'ok', 4000)
+            } catch (e) { toast('خطأ: ' + e.message, 'err') }
+            setLoading(false)
+          }}>
+          {loading ? '⏳ جارٍ التحديث...' : '🔄 تحديث الفرق + أعضاء دياكونيا'}
+        </button>
+        <button className="btn ghost full" disabled={loading}
+          onClick={async () => {
+            setLoading(true)
+            try {
+              const n = await migrateLegacyDocs('participants')
+              if (n > 0) toast(`✓ تم إصلاح ${n} مستند — الحذف سيعمل الآن`, 'ok', 4000)
+              else toast('لا توجد مستندات تحتاج إصلاح', 'ok')
+            } catch (e) { toast('خطأ: ' + e.message, 'err') }
+            setLoading(false)
+          }}>
+          🔧 إصلاح المستندات القديمة (يسمح بالحذف)
+        </button>
       </div>
 
       <button className="btn full" onClick={save}><Icon name="check" size={18} /> حفظ كل الإعدادات</button>
