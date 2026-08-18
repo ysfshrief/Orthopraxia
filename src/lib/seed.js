@@ -27,19 +27,18 @@ export const SEED = {
     points: {
       startTime: '19:00',       // الوقت المرجعي لبداية احتساب النقاط
       tiers: [
-        { untilTime: '19:00', points: 100 }, // عند أو قبل 7:00 م
-        { untilTime: '19:30', points: 50 },  // حتى 7:30 م
-        { untilTime: '20:00', points: 25 },  // حتى 8:00 م
-        { untilTime: '23:59', points: 0 }    // بعد ذلك
+        { untilTime: '19:15', points: 100 }, // عند أو قبل 7:15 م
+        { untilTime: '19:30', points: 50 },  // من 7:15 حتى 7:30 م
+        { untilTime: '23:59', points: 0 }    // بعد 7:30 م
       ]
     }
   },
 
   teams: [
-    { id: 'team1', name: 'الفريق الأول', color: '#8B2E1E', leader: '', order: 1, bonusPoints: 0 },
-    { id: 'team2', name: 'الفريق الثاني', color: '#C99A3A', leader: '', order: 2, bonusPoints: 0 },
-    { id: 'team3', name: 'الفريق الثالث', color: '#3E6B4F', leader: '', order: 3, bonusPoints: 0 },
-    { id: 'team4', name: 'الفريق الرابع', color: '#3A5A78', leader: '', order: 4, bonusPoints: 0 }
+    { id: 'team1', name: 'ميطانيا', color: '#3E8B4F', leader: '', order: 1, bonusPoints: 0 },
+    { id: 'team2', name: 'دياكونيا', color: '#5B9BD5', leader: 'فادى أشرف', order: 2, bonusPoints: 0 },
+    { id: 'team3', name: 'كينونيا', color: '#C0392B', leader: '', order: 3, bonusPoints: 0 },
+    { id: 'team4', name: 'مارتيريا', color: '#F1C40F', leader: '', order: 4, bonusPoints: 0 }
   ],
 
   program: [
@@ -77,6 +76,28 @@ export const SEED = {
     { id: 'p27', day: day3, order: 27, time: '9:00 ص',  title: 'الفطار', place: '' },
     { id: 'p28', day: day3, order: 28, time: '10:00 ص', title: 'الختام', place: '' },
     { id: 'p29', day: day3, order: 29, time: '11:00 ص', title: 'تسليم الغرف', place: '' }
+  ],
+
+  // فريق دياكونيا — مستخرج من ملف الإكسل
+  participants: [
+    { id: 'dk01', name: 'فادى أشرف', teamId: 'team2', qr: 'dk01', phone: '' },
+    { id: 'dk02', name: 'فيفيان ميشيل', teamId: 'team2', qr: 'dk02', phone: '' },
+    { id: 'dk03', name: 'كيرلس مينا', teamId: 'team2', qr: 'dk03', phone: '' },
+    { id: 'dk04', name: 'مينا ملاك', teamId: 'team2', qr: 'dk04', phone: '' },
+    { id: 'dk05', name: 'ثابت البطل', teamId: 'team2', qr: 'dk05', phone: '' },
+    { id: 'dk06', name: 'سامى رياض', teamId: 'team2', qr: 'dk06', phone: '' },
+    { id: 'dk07', name: 'مينا أيمن', teamId: 'team2', qr: 'dk07', phone: '' },
+    { id: 'dk08', name: 'يوسف فهيم', teamId: 'team2', qr: 'dk08', phone: '' },
+    { id: 'dk09', name: 'جون طارق', teamId: 'team2', qr: 'dk09', phone: '' },
+    { id: 'dk10', name: 'منى وائل', teamId: 'team2', qr: 'dk10', phone: '' },
+    { id: 'dk11', name: 'مهرائيل ناجح', teamId: 'team2', qr: 'dk11', phone: '' },
+    { id: 'dk12', name: 'يوستنا سعيد', teamId: 'team2', qr: 'dk12', phone: '' },
+    { id: 'dk13', name: 'يوستينا عادل', teamId: 'team2', qr: 'dk13', phone: '' },
+    { id: 'dk14', name: 'كلارا كمال', teamId: 'team2', qr: 'dk14', phone: '' },
+    { id: 'dk15', name: 'إيفيتا نادر', teamId: 'team2', qr: 'dk15', phone: '' },
+    { id: 'dk16', name: 'مريم عماد نبيل', teamId: 'team2', qr: 'dk16', phone: '' },
+    { id: 'dk17', name: 'دميانه عماد', teamId: 'team2', qr: 'dk17', phone: '' },
+    { id: 'dk18', name: 'كاترين سعد', teamId: 'team2', qr: 'dk18', phone: '' },
   ]
 }
 

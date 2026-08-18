@@ -43,7 +43,7 @@ export default function AdminSettings({ back, embedded }) {
 
       <div className="card" style={{ marginBottom: 14 }}>
         <h3 className="section-title" style={{ marginTop: 0 }}>نظام نقاط الحضور</h3>
-        <p className="subtle">النقاط تُحسب حسب وقت اكتمال حضور الفريق بالكامل.</p>
+        <p className="subtle">كل فرد يحصل على حصته من الدرجة حسب وقت حضوره. مثال: لو الفريق 18 والدرجة الكاملة 100 → كل فرد يضيف 100÷18 ≈ 5.56 نقطة لفريقه إذا حضر في الوقت المحدد.</p>
         {s.points.tiers.map((t, i) => (
           <div key={i} className="card" style={{ marginBottom: 8, padding: 12, background: 'rgba(201,154,58,.08)' }}>
             <div className="subtle" style={{ marginBottom: 6 }}>

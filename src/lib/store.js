@@ -1,7 +1,7 @@
 import { DEMO_MODE, db } from './firebase'
 import {
-  collection, doc, getDocs, getDoc, setDoc, addDoc, updateDoc,
-  deleteDoc, onSnapshot, query, orderBy, writeBatch
+  collection, doc, getDocs, getDoc, setDoc, updateDoc,
+  deleteDoc, onSnapshot, query, writeBatch
 } from 'firebase/firestore'
 import { SEED } from './seed'
 
@@ -35,8 +35,9 @@ export async function ensureSeed() {
       lsSet('settings', [SEED.settings])
       lsSet('program', SEED.program.map(p => ({ ...p })))
       lsSet('teams', SEED.teams.map(t => ({ ...t })))
-      lsSet('participants', [])
+      lsSet('participants', (SEED.participants || []).map(p => ({ ...p })))
       lsSet('attendanceResults', [])
+      lsSet('attendanceScans', [])
       lsSet('videos', [])
       lsSet('competitions', [])
       lsSet('audio', [])
@@ -53,6 +54,7 @@ export async function ensureSeed() {
     batch.set(settingsRef, SEED.settings)
     SEED.program.forEach(p => batch.set(doc(db, 'program', p.id), p))
     SEED.teams.forEach(t => batch.set(doc(db, 'teams', t.id), t))
+    ;(SEED.participants || []).forEach(p => batch.set(doc(db, 'participants', p.id), p))
     await batch.commit()
   }
 }
@@ -78,13 +80,16 @@ export function subscribe(col, cb) {
 }
 
 export async function create(col, data) {
+  // Always use our own ID as the Firestore document ID so that
+  // remove(col, id) targets the correct path (fixes delete bug).
+  const id = data.id || uid()
   if (DEMO_MODE) {
     const arr = lsGet(col)
-    const item = { id: uid(), ...data }
+    const item = { ...data, id }
     arr.push(item); lsSet(col, arr); return item
   }
-  const ref = await addDoc(collection(db, col), data)
-  return { id: ref.id, ...data }
+  await setDoc(doc(db, col, id), { ...data, id })
+  return { ...data, id }
 }
 
 export async function upsert(col, id, data) {
