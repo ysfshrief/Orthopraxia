@@ -41,6 +41,13 @@ export default function Scan() {
     setTimeout(initCamera, 100)
   }
 
+  const resetSession = () => {
+    if (!confirm('بدء جلسة جديدة؟ سيتم مسح قوائم الحضور الحالية من الشاشة (النتائج المحفوظة تبقى).')) return
+    setSessions({})
+    setAllScannedIds(new Set())
+    toast('تم بدء جلسة جديدة', 'ok')
+  }
+
   const initCamera = async () => {
     try {
       const qr = new Html5Qrcode('qr-reader')
@@ -180,7 +187,10 @@ export default function Scan() {
           {/* live sessions summary */}
           {Object.keys(sessions).length > 0 && (
             <>
-              <h3 className="section-title">الفرق في هذه الجلسة</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 className="section-title" style={{ marginBottom: 0 }}>الفرق في هذه الجلسة</h3>
+                <button className="btn ghost" style={{ padding: '6px 12px' }} onClick={resetSession}>جلسة جديدة</button>
+              </div>
               {Object.entries(sessions).map(([tid, s]) => {
                 const t = teams.find(x => x.id === tid)
                 const size = participants.filter(p => p.teamId === tid).length
