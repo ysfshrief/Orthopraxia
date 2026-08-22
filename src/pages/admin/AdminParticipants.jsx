@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useData } from '../../context/DataContext'
 import { create, update, remove, uid } from '../../lib/store'
+import { printCards } from '../../lib/printCards'
 import { useToast, Modal, Header } from '../../components/UI'
 import QrCard from '../../components/QrCard'
 import Icon from '../../components/Icons'
@@ -37,37 +38,21 @@ export default function AdminParticipants({ back, embedded }) {
 
   const teamOf = (p) => teams.find(t => t.id === p.teamId)
 
-  const printAll = () => {
-    const w = window.open('', '_blank')
-    if (!w) return toast('اسمح بالنوافذ المنبثقة', 'err')
-    const cards = shown.map(p => {
+  const printAll = async () => {
+    if (shown.length === 0) return
+    toast('جارٍ تجهيز الكارنيهات...', 'ok', 1500)
+    const items = shown.map(p => {
       const t = teamOf(p)
-      return `<div class="c" style="border-color:${t?.color || '#C99A3A'}">
-        <div class="h">Orthopraxia</div>
-        <div class="qr" id="q_${p.id}"></div>
-        <div class="n">${p.name}</div>
-        <div class="t" style="background:${t?.color || '#C99A3A'}">${t?.name || ''}</div>
-        <div class="id">ID: ${p.id}</div>
-      </div>`
-    }).join('')
-    w.document.write(`<!doctype html><html dir="rtl"><head><meta charset="utf8">
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
-    <style>
-      body{font-family:sans-serif;display:flex;flex-wrap:wrap;gap:12px;padding:12px;background:#fff}
-      .c{width:230px;border:2px solid;border-radius:14px;padding:14px;text-align:center;page-break-inside:avoid}
-      .h{font-weight:900;color:#6B2318;margin-bottom:8px}
-      .qr canvas{margin:auto}
-      .n{font-weight:900;font-size:16px;margin-top:8px}
-      .t{color:#fff;display:inline-block;padding:3px 12px;border-radius:99px;margin-top:6px;font-size:12px}
-      .id{font-size:10px;color:#999;margin-top:4px}
-      @media print{.c{border-width:1px}}
-    </style></head><body>${cards}
-    <script>
-      const data=${JSON.stringify(shown.map(p => ({ id: p.id, qr: p.qr || p.id })))};
-      Promise.all(data.map(d=>QRCode.toCanvas(d.qr,{width:130,margin:1,color:{dark:'#6B2318',light:'#fff'}}).then(cv=>{document.getElementById('q_'+d.id).appendChild(cv)})))
-      .then(()=>setTimeout(()=>window.print(),400));
-    </script></body></html>`)
-    w.document.close()
+      return {
+        qrValue: p.qr || p.id,
+        name: p.name,
+        subtitle: t?.name || '',
+        subColor: t?.color || '#C99A3A',
+        idLabel: `ID: ${p.id}`
+      }
+    })
+    const ok = await printCards(items)
+    if (!ok) toast('اسمح بالنوافذ المنبثقة (Popups)', 'err')
   }
 
   return (
@@ -177,6 +162,12 @@ export default function AdminParticipants({ back, embedded }) {
         <Modal title="كارنيه المخدوم" onClose={() => setCard(null)}>
           <div className="center-col">
             <QrCard participant={card} team={teamOf(card)} retreatName="Orthopraxia" />
+            <button className="btn full" style={{ marginTop: 16 }} onClick={async () => {
+              const t = teamOf(card)
+              await printCards([{ qrValue: card.qr || card.id, name: card.name, subtitle: t?.name || '', subColor: t?.color || '#C99A3A', idLabel: `ID: ${card.id}` }])
+            }}>
+              <Icon name="card" size={18} /> طباعة الكارنيه
+            </button>
           </div>
         </Modal>
       )}

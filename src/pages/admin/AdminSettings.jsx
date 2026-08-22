@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { subscribeSettings, saveSettings, forceSeed, migrateLegacyDocs } from '../../lib/store'
+import { subscribeSettings, saveSettings, forceSeed, migrateLegacyDocs, cleanupLegacyTeams } from '../../lib/store'
 import { useToast, Header } from '../../components/UI'
 import { fmt } from '../../lib/points'
 import Icon from '../../components/Icons'
@@ -98,6 +98,18 @@ export default function AdminSettings({ back, embedded }) {
             setLoading(false)
           }}>
           🔧 إصلاح المستندات القديمة (يسمح بالحذف)
+        </button>
+        <button className="btn red full" style={{ marginTop: 10 }} disabled={loading}
+          onClick={async () => {
+            if (!confirm('حذف الفرق القديمة المكررة (الفارغة)؟')) return
+            setLoading(true)
+            try {
+              const n = await cleanupLegacyTeams()
+              toast(n > 0 ? `✓ تم حذف ${n} فريق قديم مكرر` : 'لا توجد فرق مكررة', 'ok', 4000)
+            } catch (e) { toast('خطأ: ' + e.message, 'err') }
+            setLoading(false)
+          }}>
+          🗑️ حذف الفرق القديمة المكررة
         </button>
       </div>
 

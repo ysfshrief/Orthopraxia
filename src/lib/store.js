@@ -104,6 +104,33 @@ export async function forceSeed() {
 }
 
 /*
+  Remove legacy teams (old IDs team1..team4) that were replaced by
+  semantic IDs. Removes teams not in SEED that also have 0 members.
+*/
+export async function cleanupLegacyTeams() {
+  const validIds = new Set(SEED.teams.map(t => t.id))
+  if (DEMO_MODE) {
+    const teams = lsGet('teams')
+    const participants = lsGet('participants')
+    const kept = teams.filter(t => validIds.has(t.id) || participants.some(p => p.teamId === t.id))
+    lsSet('teams', kept)
+    return teams.length - kept.length
+  }
+  const tSnap = await getDocs(collection(db, 'teams'))
+  const pSnap = await getDocs(collection(db, 'participants'))
+  const teamsWithMembers = new Set()
+  pSnap.docs.forEach(d => { const t = d.data().teamId; if (t) teamsWithMembers.add(t) })
+  const batch = writeBatch(db)
+  let removed = 0
+  tSnap.docs.forEach(d => {
+    const id = d.data().id || d.id
+    if (!validIds.has(id) && !teamsWithMembers.has(id)) { batch.delete(d.ref); removed++ }
+  })
+  if (removed > 0) await batch.commit()
+  return removed
+}
+
+/*
   Migrate legacy documents: old code used addDoc (random Firestore ID)
   but stored our id as a field. This re-creates them with id = doc ID
   and deletes the orphaned random-ID docs.

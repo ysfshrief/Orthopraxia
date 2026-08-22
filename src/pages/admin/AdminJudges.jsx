@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { subscribe, create, update, remove, uid } from '../../lib/store'
+import { printCards } from '../../lib/printCards'
 import { useToast, Modal, Header } from '../../components/UI'
 import QrCard from '../../components/QrCard'
 import Icon from '../../components/Icons'
@@ -31,12 +32,29 @@ export default function AdminJudges({ back, embedded }) {
     toast(j.active !== false ? 'تم تعطيل الحساب' : 'تم تفعيل الحساب', 'ok')
   }
 
+  const printOne = async (j) => {
+    const ok = await printCards([{ qrValue: j.qr || j.id, name: j.name, subtitle: 'حكم', subColor: '#6B2318', idLabel: `ID: ${j.id}` }])
+    if (!ok) toast('اسمح بالنوافذ المنبثقة', 'err')
+  }
+  const printAll = async () => {
+    if (judges.length === 0) return
+    toast('جارٍ تجهيز الكارنيهات...', 'ok', 1500)
+    const items = judges.map(j => ({ qrValue: j.qr || j.id, name: j.name, subtitle: 'حكم', subColor: '#6B2318', idLabel: `ID: ${j.id}` }))
+    const ok = await printCards(items)
+    if (!ok) toast('اسمح بالنوافذ المنبثقة', 'err')
+  }
+
   return (
     <div className="page">
       {!embedded && <Header title="الحكام" back={back} />}
-      <button className="btn gold full" style={{ marginBottom: 14 }} onClick={() => setEdit({ name: '', active: true })}>
-        <Icon name="plus" size={18} /> إضافة حكم
-      </button>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        <button className="btn gold" style={{ flex: 1 }} onClick={() => setEdit({ name: '', active: true })}>
+          <Icon name="plus" size={18} /> إضافة حكم
+        </button>
+        <button className="btn" style={{ flex: 1 }} onClick={printAll} disabled={judges.length === 0}>
+          <Icon name="card" size={18} /> طباعة كل الكارنيهات
+        </button>
+      </div>
       <p className="subtle" style={{ marginBottom: 14 }}>الحكم يدخل بتصوير الكارنيه (QR) فقط — لا يوجد كود يدوي.</p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -77,6 +95,9 @@ export default function AdminJudges({ back, embedded }) {
         <Modal title="كارنيه الحكم" onClose={() => setCard(null)}>
           <div className="center-col">
             <QrCard participant={{ id: card.id, name: card.name, qr: card.qr || card.id }} team={{ name: 'حكم', color: '#6B2318' }} retreatName="Orthopraxia" />
+            <button className="btn full" style={{ marginTop: 16 }} onClick={() => printOne(card)}>
+              <Icon name="card" size={18} /> طباعة الكارنيه
+            </button>
           </div>
         </Modal>
       )}

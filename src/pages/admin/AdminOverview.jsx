@@ -5,17 +5,20 @@ import { subscribe } from '../../lib/store'
 
 export default function AdminOverview({ teams, participants, results, stats, goto }) {
   const [program, setProgram] = useState([])
+  const [judgePoints, setJudgePoints] = useState([])
   useEffect(() => subscribe('program', arr => {
     arr.sort((a, b) => (a.order || 0) - (b.order || 0)); setProgram(arr)
   }), [])
+  useEffect(() => subscribe('judgePoints', setJudgePoints), [])
 
-  // team standings
+  // team standings (attendance + judge + bonus)
   const standings = useMemo(() => {
     return teams.map(t => {
       const att = results.filter(r => r.teamId === t.id).reduce((s, r) => s + (r.points || 0), 0)
-      return { ...t, att, total: att + (t.bonusPoints || 0), members: participants.filter(p => p.teamId === t.id).length }
+      const jp = judgePoints.filter(p => p.teamId === t.id).reduce((s, p) => s + (p.points || 0), 0)
+      return { ...t, att, jp, total: Math.round((att + jp + (t.bonusPoints || 0)) * 100) / 100, members: participants.filter(p => p.teamId === t.id).length }
     }).sort((a, b) => b.total - a.total)
-  }, [teams, results, participants])
+  }, [teams, results, participants, judgePoints])
 
   const maxPts = Math.max(1, ...standings.map(s => s.total))
 

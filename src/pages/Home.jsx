@@ -51,13 +51,16 @@ export default function Home() {
 
   return (
     <div className="page">
-      <MainVideo />
       <div className="center-col" style={{ paddingTop: 6 }}>
         <div className="logo-ring">
           <img src="/logo-circle.png" alt="Orthopraxia" />
         </div>
         <h1 style={{ margin: '12px 0 2px', color: 'var(--maroon)', fontSize: 30 }}>{settings.retreatName}</h1>
         <div className="pill" style={{ background: 'rgba(201,154,58,.2)', color: 'var(--maroon)' }}>{settings.subtitle}</div>
+      </div>
+
+      <div style={{ marginTop: 18 }}>
+        <MainVideo />
       </div>
 
       <div style={{ marginTop: 18 }}>
