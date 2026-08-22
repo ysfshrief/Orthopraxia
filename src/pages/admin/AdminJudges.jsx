@@ -14,13 +14,13 @@ export default function AdminJudges({ back, embedded }) {
 
   const save = async () => {
     if (!edit.name) return toast('ادخل الاسم', 'warn')
-    if (!edit.code) return toast('ادخل كود الدخول', 'warn')
     if (edit.id) {
-      await update('judges', edit.id, { name: edit.name, code: edit.code, qr: edit.code, active: edit.active !== false })
+      await update('judges', edit.id, { name: edit.name, active: edit.active !== false })
       toast('تم الحفظ', 'ok')
     } else {
       const id = uid()
-      await create('judges', { id, name: edit.name, code: edit.code, qr: edit.code, active: true })
+      // QR value = the judge id itself (like participants)
+      await create('judges', { id, name: edit.name, qr: id, active: true })
       toast('تمت إضافة الحكم', 'ok')
     }
     setEdit(null)
@@ -34,9 +34,10 @@ export default function AdminJudges({ back, embedded }) {
   return (
     <div className="page">
       {!embedded && <Header title="الحكام" back={back} />}
-      <button className="btn gold full" style={{ marginBottom: 14 }} onClick={() => setEdit({ name: '', code: '', active: true })}>
+      <button className="btn gold full" style={{ marginBottom: 14 }} onClick={() => setEdit({ name: '', active: true })}>
         <Icon name="plus" size={18} /> إضافة حكم
       </button>
+      <p className="subtle" style={{ marginBottom: 14 }}>الحكم يدخل بتصوير الكارنيه (QR) فقط — لا يوجد كود يدوي.</p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {judges.map(j => {
@@ -46,7 +47,7 @@ export default function AdminJudges({ back, embedded }) {
               <span style={{ width: 42, height: 42, borderRadius: 12, background: 'var(--maroon)', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 800 }}>⚖️</span>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 800 }}>{j.name}</div>
-                <div className="subtle">كود: {j.code} • {active ? 'مفعّل' : 'معطّل'}</div>
+                <div className="subtle">{active ? 'مفعّل' : 'معطّل'}</div>
               </div>
               <button className="btn ghost" style={{ padding: '8px' }} onClick={() => setCard(j)} title="الكارنيه"><Icon name="card" size={16} /></button>
               <button className="btn ghost" style={{ padding: '8px' }} onClick={() => toggle(j)} title={active ? 'تعطيل' : 'تفعيل'}>
@@ -63,7 +64,6 @@ export default function AdminJudges({ back, embedded }) {
       {edit && (
         <Modal title={edit.id ? 'تعديل حكم' : 'إضافة حكم'} onClose={() => setEdit(null)}>
           <div className="field"><label>الاسم</label><input value={edit.name} onChange={e => setEdit({ ...edit, name: e.target.value })} autoFocus /></div>
-          <div className="field"><label>كود الدخول (للـ QR)</label><input value={edit.code} onChange={e => setEdit({ ...edit, code: e.target.value })} placeholder="مثال: 111" /></div>
           {edit.id && (
             <label style={{ display: 'flex', gap: 10, alignItems: 'center', fontWeight: 700, marginBottom: 14 }}>
               <input type="checkbox" checked={edit.active !== false} onChange={e => setEdit({ ...edit, active: e.target.checked })} style={{ width: 20, height: 20 }} /> الحساب مفعّل
@@ -76,7 +76,7 @@ export default function AdminJudges({ back, embedded }) {
       {card && (
         <Modal title="كارنيه الحكم" onClose={() => setCard(null)}>
           <div className="center-col">
-            <QrCard participant={{ id: card.code, name: card.name, qr: card.code }} team={{ name: 'حكم', color: '#6B2318' }} retreatName="Orthopraxia" />
+            <QrCard participant={{ id: card.id, name: card.name, qr: card.qr || card.id }} team={{ name: 'حكم', color: '#6B2318' }} retreatName="Orthopraxia" />
           </div>
         </Modal>
       )}

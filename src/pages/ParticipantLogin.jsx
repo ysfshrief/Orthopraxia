@@ -40,8 +40,8 @@ export default function ParticipantLogin() {
     if (lock.current) return
     const c = code.trim()
 
-    // Check judges first
-    const judge = judges.find(j => j.code === c || j.qr === c || j.id === c)
+    // Check judges first (by QR / id — no manual code)
+    const judge = judges.find(j => j.qr === c || j.id === c)
     if (judge) {
       if (judge.active === false) { toast('حساب الحكم معطّل حالياً', 'err'); return }
       lock.current = true

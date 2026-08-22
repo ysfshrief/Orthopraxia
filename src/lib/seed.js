@@ -109,7 +109,7 @@ export const SEED = {
   participants: [...metania, ...diakonia, ...kinonia, ...martiria],
 
   judges: [
-    { id: 'judge_main', name: 'الحكم', code: '111', qr: '111', active: true }
+    { id: 'judge_main', name: 'الحكم', qr: 'judge_main', active: true }
   ]
 }
 
