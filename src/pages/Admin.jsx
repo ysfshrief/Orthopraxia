@@ -11,12 +11,16 @@ import AdminResults from './admin/AdminResults'
 import AdminSettings from './admin/AdminSettings'
 import AdminNotifications from './admin/AdminNotifications'
 import AdminOverview from './admin/AdminOverview'
+import AdminJudges from './admin/AdminJudges'
+import AdminMainVideo from './admin/AdminMainVideo'
 
 const SECTIONS = [
   { key: 'overview', label: 'نظرة عامة', icon: 'grid' },
   { key: 'teams', label: 'الفرق', icon: 'users' },
   { key: 'participants', label: 'المخدومين + الكارنيهات', icon: 'card' },
+  { key: 'judges', label: 'الحكام', icon: 'trophy' },
   { key: 'results', label: 'الحضور والنقاط', icon: 'trophy' },
+  { key: 'mainvideo', label: 'Main Video', icon: 'video' },
   { key: 'notifications', label: 'الإشعارات', icon: 'bell' },
   { key: 'settings', label: 'الإعدادات', icon: 'gear' },
 ]
@@ -24,6 +28,7 @@ const SECTIONS = [
 const CMP = {
   teams: AdminTeams, participants: AdminParticipants, results: AdminResults,
   settings: AdminSettings, notifications: AdminNotifications,
+  judges: AdminJudges, mainvideo: AdminMainVideo,
 }
 
 export default function Admin() {
@@ -148,7 +153,9 @@ function AdminMobile({ mSection, setMSection, stats, results }) {
   const M = [
     { key: 'teams', label: 'الفرق', icon: 'users' },
     { key: 'participants', label: 'المخدومين + الكارنيهات', icon: 'card' },
+    { key: 'judges', label: 'الحكام', icon: 'trophy' },
     { key: 'results', label: 'الحضور والنقاط', icon: 'trophy' },
+    { key: 'mainvideo', label: 'Main Video', icon: 'video' },
     { key: 'notifications', label: 'الإشعارات', icon: 'bell' },
     { key: 'settings', label: 'الإعدادات', icon: 'gear' },
   ]

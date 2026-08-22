@@ -9,18 +9,21 @@ export default function Leaderboard() {
   const { teams, settings } = useData()
   const { isAdmin } = useAuth()
   const [results, setResults] = useState([])
+  const [judgePoints, setJudgePoints] = useState([])
 
   useEffect(() => subscribe('attendanceResults', setResults), [])
+  useEffect(() => subscribe('judgePoints', setJudgePoints), [])
 
   const ranked = useMemo(() => {
     const rows = teams.map(t => {
       const attPts = results.filter(r => r.teamId === t.id).reduce((s, r) => s + (r.points || 0), 0)
+      const jp = judgePoints.filter(p => p.teamId === t.id).reduce((s, p) => s + (p.points || 0), 0)
       const bonus = t.bonusPoints || 0
-      return { ...t, attPts, bonus, total: attPts + bonus }
+      return { ...t, attPts, jp, bonus, total: Math.round((attPts + jp + bonus) * 100) / 100 }
     })
     rows.sort((a, b) => b.total - a.total)
     return rows
-  }, [teams, results])
+  }, [teams, results, judgePoints])
 
   const hidden = !settings.leaderboardVisible
 
@@ -60,7 +63,7 @@ export default function Leaderboard() {
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 800, fontSize: 17 }}>{t.name}</div>
-              <div className="subtle">حضور: {t.attPts}{t.bonus ? ` + إضافي: ${t.bonus}` : ''}</div>
+              <div className="subtle">حضور: {t.attPts}{t.jp ? ` • حكم: ${t.jp > 0 ? '+' : ''}${t.jp}` : ''}{t.bonus ? ` • إضافي: ${t.bonus}` : ''}</div>
             </div>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 26, fontWeight: 900, color: 'var(--maroon)' }}>{t.total}</div>

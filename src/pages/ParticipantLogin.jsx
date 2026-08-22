@@ -1,17 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Html5Qrcode } from 'html5-qrcode'
+import { subscribe } from '../lib/store'
 import { useData } from '../context/DataContext'
 import { useParticipant } from '../context/ParticipantContext'
 import { useToast, Header } from '../components/UI'
 import Icon from '../components/Icons'
 
 export default function ParticipantLogin() {
+  const nav = useNavigate()
   const { participants } = useData()
-  const { login } = useParticipant()
+  const { login, loginJudge } = useParticipant()
   const toast = useToast()
+  const [judges, setJudges] = useState([])
   const [scanning, setScanning] = useState(false)
   const qrRef = useRef(null)
   const lock = useRef(false)
+
+  useEffect(() => subscribe('judges', setJudges), [])
 
   const startScan = () => { setScanning(true); setTimeout(init, 100) }
 
@@ -33,13 +39,28 @@ export default function ParticipantLogin() {
   const onScan = (code) => {
     if (lock.current) return
     const c = code.trim()
+
+    // Check judges first
+    const judge = judges.find(j => j.code === c || j.qr === c || j.id === c)
+    if (judge) {
+      if (judge.active === false) { toast('حساب الحكم معطّل حالياً', 'err'); return }
+      lock.current = true
+      if (navigator.vibrate) navigator.vibrate(60)
+      stop(); loginJudge(judge.id)
+      toast(`أهلاً ${judge.name} ⚖️`, 'ok')
+      nav('/judge')
+      return
+    }
+
+    // Then participants
     const person = participants.find(p => p.id === c || p.qr === c)
     if (!person) { toast('QR غير صالح أو غير مسجّل', 'err'); return }
+    if (person.active === false) { toast('هذا الحساب معطّل — راجع المسؤول', 'err'); return }
     lock.current = true
     if (navigator.vibrate) navigator.vibrate(60)
-    stop()
-    login(person.id)
+    stop(); login(person.id)
     toast(`أهلاً ${person.name} 👋`, 'ok')
+    nav('/me')
   }
 
   return (

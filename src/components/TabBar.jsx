@@ -11,7 +11,7 @@ const base = [
 
 export default function TabBar() {
   const { isAdmin } = useAuth()
-  const { participantId } = useParticipant()
+  const { participantId, judgeId } = useParticipant()
   return (
     <nav className="tabbar">
       {base.map(t => (
@@ -21,6 +21,12 @@ export default function TabBar() {
           <span>{t.label}</span>
         </NavLink>
       ))}
+      {judgeId && (
+        <NavLink to="/judge" className={({ isActive }) => isActive ? 'active' : ''}>
+          <Icon name="trophy" />
+          <span>الحكم</span>
+        </NavLink>
+      )}
       {participantId && (
         <NavLink to="/me" className={({ isActive }) => isActive ? 'active' : ''}>
           <Icon name="users" />

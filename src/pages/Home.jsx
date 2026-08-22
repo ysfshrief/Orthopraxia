@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { useParticipant } from '../context/ParticipantContext'
 import { useToast, Modal } from '../components/UI'
 import Countdown from '../components/Countdown'
+import MainVideo from '../components/MainVideo'
 import Icon from '../components/Icons'
 
 const quick = [
@@ -20,7 +21,7 @@ export default function Home() {
   const nav = useNavigate()
   const { settings } = useData()
   const { isAdmin, login, logout } = useAuth()
-  const { participantId } = useParticipant()
+  const { participantId, judgeId } = useParticipant()
   const toast = useToast()
   const [program, setProgram] = useState([])
   const [taps, setTaps] = useState(0)
@@ -50,6 +51,7 @@ export default function Home() {
 
   return (
     <div className="page">
+      <MainVideo />
       <div className="center-col" style={{ paddingTop: 6 }}>
         <div className="logo-ring">
           <img src="/logo-circle.png" alt="Orthopraxia" />
@@ -64,9 +66,13 @@ export default function Home() {
 
       <p className="subtle" style={{ marginTop: 14, lineHeight: 1.7, textAlign: 'center' }}>{settings.about}</p>
 
-      {!participantId ? (
+      {!participantId && !judgeId ? (
         <button className="btn gold full" style={{ marginTop: 16 }} onClick={() => nav('/login')}>
           <Icon name="scan" size={18} /> تسجيل الدخول بالكارنيه
+        </button>
+      ) : judgeId ? (
+        <button className="btn full" style={{ marginTop: 16 }} onClick={() => nav('/judge')}>
+          <Icon name="trophy" size={18} /> لوحة الحكم
         </button>
       ) : (
         <button className="btn full" style={{ marginTop: 16 }} onClick={() => nav('/me')}>

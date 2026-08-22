@@ -24,12 +24,16 @@ export default function AdminParticipants({ back, embedded }) {
     if (edit.id) { await update('participants', edit.id, { name: edit.name, teamId: edit.teamId, phone: edit.phone || '' }); toast('تم الحفظ', 'ok') }
     else {
       const id = uid()
-      await create('participants', { id, name: edit.name, teamId: edit.teamId, phone: edit.phone || '', qr: id })
+      await create('participants', { id, name: edit.name, teamId: edit.teamId, phone: edit.phone || '', qr: id, active: true })
       toast('تمت الإضافة', 'ok')
     }
     setEdit(null)
   }
   const del = async (id) => { if (confirm('حذف المخدوم؟')) { await remove('participants', id); toast('تم الحذف', 'warn') } }
+  const toggleActive = async (p) => {
+    await update('participants', p.id, { active: !(p.active !== false) })
+    toast(p.active !== false ? 'تم تعطيل الحساب' : 'تم تفعيل الحساب', 'ok')
+  }
 
   const teamOf = (p) => teams.find(t => t.id === p.teamId)
 
@@ -87,19 +91,21 @@ export default function AdminParticipants({ back, embedded }) {
             <div className="adm-table-wrap">
               <table className="adm-table">
                 <thead>
-                  <tr><th>#</th><th>الاسم</th><th>الفريق</th><th>الهاتف</th><th style={{ textAlign: 'end' }}>إجراءات</th></tr>
+                  <tr><th>#</th><th>الاسم</th><th>الفريق</th><th>الحالة</th><th style={{ textAlign: 'end' }}>إجراءات</th></tr>
                 </thead>
                 <tbody>
                   {shown.map((p, i) => {
                     const t = teamOf(p)
+                    const active = p.active !== false
                     return (
-                      <tr key={p.id}>
+                      <tr key={p.id} style={{ opacity: active ? 1 : 0.5 }}>
                         <td className="subtle">{i + 1}</td>
                         <td style={{ fontWeight: 700 }}>{p.name}</td>
                         <td><span className="pill" style={{ background: (t?.color || 'var(--gold)') + '22', color: t?.color || 'var(--maroon)' }}>{t?.name || 'بدون فريق'}</span></td>
-                        <td className="subtle" style={{ direction: 'ltr', unicodeBidi: 'plaintext' }}>{p.phone || '—'}</td>
+                        <td><span className="pill" style={{ background: active ? 'rgba(62,107,79,.15)' : 'rgba(178,58,47,.15)', color: active ? 'var(--green)' : 'var(--red)' }}>{active ? 'مفعّل' : 'معطّل'}</span></td>
                         <td>
                           <div className="row-actions">
+                            <button className="btn ghost" style={{ padding: '6px 8px' }} onClick={() => toggleActive(p)} title={active ? 'تعطيل' : 'تفعيل'}>{active ? '🔴' : '🟢'}</button>
                             <button className="btn ghost" style={{ padding: '6px 8px' }} onClick={() => setCard(p)} title="الكارنيه"><Icon name="card" size={16} /></button>
                             <button className="btn ghost" style={{ padding: '6px 8px' }} onClick={() => setEdit(p)} title="تعديل"><Icon name="edit" size={16} /></button>
                             <button className="btn ghost" style={{ padding: '6px 8px', color: 'var(--red)' }} onClick={() => del(p.id)} title="حذف"><Icon name="trash" size={16} /></button>
@@ -134,12 +140,14 @@ export default function AdminParticipants({ back, embedded }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {shown.map(p => {
               const t = teamOf(p)
+              const active = p.active !== false
               return (
-                <div key={p.id} className="card" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, borderInlineStart: `5px solid ${t?.color || 'var(--gold)'}` }}>
+                <div key={p.id} className="card" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, opacity: active ? 1 : 0.55, borderInlineStart: `5px solid ${t?.color || 'var(--gold)'}` }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 800 }}>{p.name}</div>
-                    <div className="subtle">{t?.name || 'بدون فريق'}</div>
+                    <div className="subtle">{t?.name || 'بدون فريق'} • {active ? 'مفعّل' : 'معطّل'}</div>
                   </div>
+                  <button className="btn ghost" style={{ padding: '8px' }} onClick={() => toggleActive(p)} title={active ? 'تعطيل' : 'تفعيل'}>{active ? '🔴' : '🟢'}</button>
                   <button className="btn ghost" style={{ padding: '8px' }} onClick={() => setCard(p)}><Icon name="card" size={16} /></button>
                   <button className="btn ghost" style={{ padding: '8px' }} onClick={() => setEdit(p)}><Icon name="edit" size={16} /></button>
                   <button className="btn ghost" style={{ padding: '8px', color: 'var(--red)' }} onClick={() => del(p.id)}><Icon name="trash" size={16} /></button>

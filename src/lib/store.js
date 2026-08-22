@@ -34,9 +34,11 @@ export async function ensureSeed() {
       lsSet('program', SEED.program.map(p => ({ ...p })))
       lsSet('teams', SEED.teams.map(t => ({ ...t })))
       lsSet('participants', (SEED.participants || []).map(p => ({ ...p })))
+      lsSet('judges', (SEED.judges || []).map(j => ({ ...j })))
       lsSet('attendanceResults', [])
       lsSet('attendanceScans', [])
       lsSet('videos', [])
+      lsSet('mainVideos', [])
       lsSet('competitions', [])
       lsSet('audio', [])
       lsSet('notifications', [])
@@ -53,6 +55,7 @@ export async function ensureSeed() {
     SEED.program.forEach(p => batch.set(doc(db, 'program', p.id), p))
     SEED.teams.forEach(t => batch.set(doc(db, 'teams', t.id), t))
     ;(SEED.participants || []).forEach(p => batch.set(doc(db, 'participants', p.id), p))
+    ;(SEED.judges || []).forEach(j => batch.set(doc(db, 'judges', j.id), j))
     await batch.commit()
   }
 }
@@ -69,15 +72,17 @@ export async function forceSeed() {
     const existingIds = new Set(existing.map(p => p.id))
     const toAdd = (SEED.participants || []).filter(p => !existingIds.has(p.id))
     lsSet('participants', [...existing, ...toAdd])
+    // judges
+    const exJudges = lsGet('judges')
+    const exJIds = new Set(exJudges.map(j => j.id))
+    const jAdd = (SEED.judges || []).filter(j => !exJIds.has(j.id))
+    lsSet('judges', [...exJudges, ...jAdd])
     lsSet('settings', [SEED.settings])
     return
   }
   const batch = writeBatch(db)
-  // update settings (merge)
   batch.set(doc(db, 'settings', 'main'), SEED.settings, { merge: true })
-  // upsert teams
   SEED.teams.forEach(t => batch.set(doc(db, 'teams', t.id), t))
-  // add participants that don't exist
   const pSnap = await getDocs(collection(db, 'participants'))
   const existingIds = new Set()
   pSnap.docs.forEach(d => {
@@ -86,9 +91,14 @@ export async function forceSeed() {
     if (data.id) existingIds.add(data.id)
   })
   ;(SEED.participants || []).forEach(p => {
-    if (!existingIds.has(p.id)) {
-      batch.set(doc(db, 'participants', p.id), p)
-    }
+    if (!existingIds.has(p.id)) batch.set(doc(db, 'participants', p.id), p)
+  })
+  // judges
+  const jSnap = await getDocs(collection(db, 'judges'))
+  const exJIds = new Set()
+  jSnap.docs.forEach(d => { exJIds.add(d.id); if (d.data().id) exJIds.add(d.data().id) })
+  ;(SEED.judges || []).forEach(j => {
+    if (!exJIds.has(j.id)) batch.set(doc(db, 'judges', j.id), j)
   })
   await batch.commit()
 }

@@ -10,9 +10,11 @@ export default function MyTeam() {
   const { participants, teams } = useData()
   const { participantId, logout } = useParticipant()
   const [results, setResults] = useState([])
+  const [judgePoints, setJudgePoints] = useState([])
   const [showCard, setShowCard] = useState(false)
 
   useEffect(() => subscribe('attendanceResults', setResults), [])
+  useEffect(() => subscribe('judgePoints', setJudgePoints), [])
 
   const me = participants.find(p => p.id === participantId)
   const team = me ? teams.find(t => t.id === me.teamId) : null
@@ -20,16 +22,19 @@ export default function MyTeam() {
 
   const teamResults = useMemo(() => me ? results.filter(r => r.teamId === me.teamId) : [], [results, me])
   const attPts = teamResults.reduce((s, r) => s + (r.points || 0), 0)
-  const totalPts = attPts + (team?.bonusPoints || 0)
+  const myJudgePts = useMemo(() => me ? judgePoints.filter(p => p.teamId === me.teamId).reduce((s, p) => s + (p.points || 0), 0) : 0, [judgePoints, me])
+  const totalPts = Math.round((attPts + myJudgePts + (team?.bonusPoints || 0)) * 100) / 100
 
   // my rank
   const rank = useMemo(() => {
     const rows = teams.map(t => ({
       id: t.id,
-      total: results.filter(r => r.teamId === t.id).reduce((s, r) => s + (r.points || 0), 0) + (t.bonusPoints || 0)
+      total: results.filter(r => r.teamId === t.id).reduce((s, r) => s + (r.points || 0), 0)
+        + judgePoints.filter(p => p.teamId === t.id).reduce((s, p) => s + (p.points || 0), 0)
+        + (t.bonusPoints || 0)
     })).sort((a, b) => b.total - a.total)
     return rows.findIndex(r => r.id === me?.teamId) + 1
-  }, [teams, results, me])
+  }, [teams, results, judgePoints, me])
 
   if (!me) {
     return (

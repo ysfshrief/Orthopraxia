@@ -1,22 +1,31 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState } from 'react'
 
 const PCtx = createContext()
 const KEY = 'ortho:participantId'
+const JKEY = 'ortho:judgeId'
 
 export function ParticipantProvider({ children }) {
   const [participantId, setParticipantId] = useState(() => localStorage.getItem(KEY) || null)
+  const [judgeId, setJudgeId] = useState(() => localStorage.getItem(JKEY) || null)
 
   const login = (id) => {
     localStorage.setItem(KEY, id)
-    setParticipantId(id)
+    localStorage.removeItem(JKEY)
+    setParticipantId(id); setJudgeId(null)
+  }
+  const loginJudge = (id) => {
+    localStorage.setItem(JKEY, id)
+    localStorage.removeItem(KEY)
+    setJudgeId(id); setParticipantId(null)
   }
   const logout = () => {
     localStorage.removeItem(KEY)
-    setParticipantId(null)
+    localStorage.removeItem(JKEY)
+    setParticipantId(null); setJudgeId(null)
   }
 
   return (
-    <PCtx.Provider value={{ participantId, login, logout }}>
+    <PCtx.Provider value={{ participantId, judgeId, login, loginJudge, logout }}>
       {children}
     </PCtx.Provider>
   )
