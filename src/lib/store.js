@@ -37,6 +37,7 @@ export async function ensureSeed() {
       lsSet('judges', (SEED.judges || []).map(j => ({ ...j })))
       lsSet('attendanceResults', [])
       lsSet('attendanceScans', [])
+      lsSet('secretFriend', [])
       lsSet('videos', [])
       lsSet('mainVideos', [])
       lsSet('competitions', [])

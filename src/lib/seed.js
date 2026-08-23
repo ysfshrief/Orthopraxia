@@ -52,6 +52,7 @@ export const SEED = {
     adminTapCount: 3,
     leaderboardVisible: false,
     mainVideoVisible: false,
+    secretFriend: { status: 'none', instructions: '' },
     points: {
       startTime: '19:00',
       tiers: [

@@ -17,6 +17,7 @@ import Admin from './pages/Admin'
 import ParticipantLogin from './pages/ParticipantLogin'
 import MyTeam from './pages/MyTeam'
 import JudgePanel from './pages/JudgePanel'
+import SecretFriend from './pages/SecretFriend'
 
 function Shell() {
   const { ready } = useData()
@@ -41,6 +42,7 @@ function Shell() {
         <Route path="/login" element={<ParticipantLogin />} />
         <Route path="/me" element={<MyTeam />} />
         <Route path="/judge" element={<JudgePanel />} />
+        <Route path="/secret-friend" element={<SecretFriend />} />
         <Route path="/admin" element={<Admin />} />
         {/* organizer-only attendance scanner — private link */}
         <Route path="/organizer" element={<Scan />} />

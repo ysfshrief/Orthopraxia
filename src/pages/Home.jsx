@@ -14,6 +14,7 @@ const quick = [
   { to: '/leaderboard', icon: 'trophy', label: 'النتائج', c: 'var(--gold)' },
   { to: '/videos', icon: 'video', label: 'الفيديوهات', c: 'var(--green)' },
   { to: '/competition', icon: 'quiz', label: 'المسابقة', c: '#3A5A78' },
+  { to: '/secret-friend', icon: 'quiz', label: 'الصديق الخفي', c: '#8B2E6E' },
   { to: '/audio', icon: 'music', label: 'الصلاة والترانيم', c: '#8B4A9E' },
 ]
 

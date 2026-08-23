@@ -271,3 +271,81 @@ input, select, textarea { font-family: inherit; font-size: 16px; }
 .foot-divider { width: 60px; height: 2px; background: rgba(201,154,58,.4); margin: 14px auto; border-radius: 2px; }
 .foot-copy { font-size: 13px; color: var(--maroon); font-weight: 700; }
 .foot-copy .sep { opacity: .5; margin: 0 6px; }
+
+/* ============ SECRET FRIEND (الصديق الخفي) ============ */
+.sf-page { position: relative; overflow: hidden; }
+.sf-center { display: flex; flex-direction: column; align-items: center; padding: 12px 0; }
+.sf-empty { text-align: center; padding: 40px 16px; }
+.sf-big-icon { font-size: 64px; animation: sf-float 3s ease-in-out infinite; }
+@keyframes sf-float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+
+/* mystery card */
+.sf-mystery-card {
+  width: 100%; max-width: 340px; border-radius: 24px; padding: 36px 22px; text-align: center;
+  background: linear-gradient(150deg, #6B2318, #8B2E1E 60%, #a5432f);
+  color: #fff; box-shadow: 0 16px 44px rgba(107,35,24,.32);
+  border: 2px solid var(--gold); position: relative; overflow: hidden;
+}
+.sf-mystery-card::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(circle at 50% 25%, rgba(201,154,58,.35), transparent 60%);
+}
+.sf-q-big { font-size: 70px; line-height: 1; position: relative; filter: drop-shadow(0 4px 10px rgba(0,0,0,.3)); }
+.sf-mystery-label { font-size: 20px; font-weight: 900; margin-top: 14px; position: relative; }
+.sf-mystery-sub { font-size: 14px; opacity: .9; margin-top: 8px; line-height: 1.7; position: relative; }
+.sf-pulse { animation: sf-pulse 2.4s ease-in-out infinite; }
+@keyframes sf-pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.03)} }
+
+.sf-flip-btn { border: none; background: none; padding: 0; cursor: pointer; width: 100%; display: flex; justify-content: center; }
+
+/* reveal card */
+.sf-reveal-card {
+  width: 100%; max-width: 340px; border-radius: 24px; padding: 32px 22px; text-align: center;
+  background: linear-gradient(150deg, #fffaf2, #f5e4c8); border: 2px solid var(--gold);
+  box-shadow: var(--shadow-lg);
+}
+.sf-reveal-card.sf-secret { background: linear-gradient(150deg, #fff, #ffe9c7); border-color: var(--maroon); }
+.sf-reveal-emoji { font-size: 56px; animation: sf-pop 0.5s ease; }
+.sf-reveal-role { font-size: 14px; font-weight: 700; color: var(--muted); margin-top: 8px; }
+.sf-reveal-name { font-size: 30px; font-weight: 900; color: var(--maroon); margin: 6px 0; }
+.sf-reveal-msg { font-size: 13px; color: var(--ink); opacity: .8; margin-top: 6px; line-height: 1.6; }
+@keyframes sf-pop { from{transform:scale(.4);opacity:0} to{transform:scale(1);opacity:1} }
+.sf-flip-in { animation: sf-flip-in .6s cubic-bezier(.2,.8,.2,1); }
+@keyframes sf-flip-in { from{transform:rotateY(90deg);opacity:0} to{transform:rotateY(0);opacity:1} }
+
+.sf-final-title { text-align: center; font-size: 26px; font-weight: 900; color: var(--maroon); margin-bottom: 16px; animation: sf-pop .5s ease; }
+
+/* mystery reminder strip */
+.sf-mystery-strip {
+  display: flex; align-items: center; gap: 12px; margin-top: 18px; padding: 14px 16px;
+  border-radius: 16px; background: var(--white); border: 1.5px dashed var(--gold);
+}
+.sf-q { font-size: 30px; animation: sf-wiggle 2s ease-in-out infinite; }
+@keyframes sf-wiggle { 0%,100%{transform:rotate(-8deg)} 50%{transform:rotate(8deg)} }
+
+/* admin timeline */
+.sf-timeline { display: flex; justify-content: space-between; gap: 4px; margin-bottom: 18px; position: relative; }
+.sf-stage { flex: 1; text-align: center; opacity: .4; transition: opacity .3s; }
+.sf-stage.done { opacity: 1; }
+.sf-stage.current .sf-stage-icon { transform: scale(1.25); box-shadow: 0 6px 16px rgba(107,35,24,.3); }
+.sf-stage-icon {
+  width: 42px; height: 42px; margin: 0 auto; border-radius: 50%; display: grid; place-items: center;
+  font-size: 20px; background: var(--white); border: 2px solid var(--gold); transition: transform .3s;
+}
+.sf-stage.done .sf-stage-icon { background: var(--gold); }
+.sf-stage-label { font-size: 11px; font-weight: 700; margin-top: 5px; color: var(--maroon); }
+
+/* confetti */
+.sf-confetti { position: fixed; inset: 0; pointer-events: none; z-index: 500; overflow: hidden; }
+.sf-confetti span {
+  position: absolute; top: -20px; width: 10px; height: 14px; border-radius: 2px;
+  animation: sf-fall linear forwards;
+}
+@keyframes sf-fall {
+  to { transform: translateY(110vh) rotate(720deg); opacity: .2; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sf-pulse, .sf-big-icon, .sf-q, .sf-flip-in, .sf-reveal-emoji, .sf-final-title { animation: none !important; }
+  .sf-confetti { display: none !important; }
+}
