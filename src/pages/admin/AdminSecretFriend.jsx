@@ -1,8 +1,8 @@
 import { useEffect, useState, useMemo } from 'react'
-import { subscribe, create, remove, listAll, saveSettings, subscribeSettings } from '../../lib/store'
+import { subscribe, create, remove, update, listAll, saveSettings, subscribeSettings } from '../../lib/store'
 import { useData } from '../../context/DataContext'
 import { useToast, Modal, Header } from '../../components/UI'
-import { generateAssignments, validateAssignments, SF_STATUS } from '../../lib/secretFriend'
+import { generateAssignments, validateAssignments, swapReceivers, SF_STATUS } from '../../lib/secretFriend'
 import Icon from '../../components/Icons'
 
 const STAGES = [
@@ -106,19 +106,28 @@ export default function AdminSecretFriend({ back, embedded }) {
 
   const saveInstructions = async () => { await setStatus(status, { instructions }); toast('تم حفظ التعليمات', 'ok') }
 
-  // full table with secret friend (admin only)
-  const table = useMemo(() => {
-    return assignments.map(a => {
-      const secretFriend = assignments.find(x => x.receiverId === a.giverId)
-      return {
-        person: a.giverName,
-        giveTo: a.receiverName,
-        secretFriend: secretFriend ? secretFriend.giverName : '—'
-      }
-    })
-  }, [assignments])
-
   const [tableSearch, setTableSearch] = useState('')
+  const [swapA, setSwapA] = useState('')
+  const [swapB, setSwapB] = useState('')
+
+  const doSwap = async () => {
+    if (!swapA || !swapB) return toast('اختر شخصين للتبديل', 'warn')
+    const res = swapReceivers(assignments, swapA, swapB)
+    if (!res.ok) return toast('تعذّر التبديل: ' + res.error, 'err')
+    // persist: update the two changed docs
+    const changed = res.assignments.filter(n => {
+      const old = assignments.find(o => o.giverId === n.giverId)
+      return old && old.receiverId !== n.receiverId
+    })
+    for (const c of changed) {
+      const docItem = assignments.find(o => o.giverId === c.giverId)
+      if (docItem && docItem.id) await update('secretFriend', docItem.id, { receiverId: c.receiverId, receiverName: c.receiverName })
+    }
+    toast('تم التبديل بنجاح ✓', 'ok')
+    setSwapA(''); setSwapB('')
+  }
+
+  const tableShownData = assignments.filter(a => !tableSearch || a.giverName.includes(tableSearch))
   const tableShown = table.filter(r => !tableSearch || r.person.includes(tableSearch))
 
   if (!settings) return <div className="page"><Header title="الصديق الخفي" back={back} /><div className="empty"><div className="spinner" /></div></div>
@@ -169,18 +178,44 @@ export default function AdminSecretFriend({ back, embedded }) {
       {status !== 'none' && assignments.length > 0 && (
         <div className="card" style={{ marginBottom: 14 }}>
           <h3 className="section-title" style={{ marginTop: 0 }}>التوزيعة الكاملة</h3>
+
+          {/* Swap UI — draft only */}
+          {status === 'draft' && (
+            <div className="sf-swap">
+              <div style={{ fontWeight: 800, color: 'var(--maroon)', marginBottom: 8 }}>🔄 تبديل (Swap) قبل الاعتماد</div>
+              <p className="subtle" style={{ marginBottom: 10 }}>اختر شخصين ليتبادلا "المرسل إليه". النظام يرفض أي تبديل غير صالح.</p>
+              <div className="sf-swap-row">
+                <select value={swapA} onChange={e => setSwapA(e.target.value)}>
+                  <option value="">— الشخص الأول —</option>
+                  {assignments.map(a => <option key={a.giverId} value={a.giverId}>{a.giverName}</option>)}
+                </select>
+                <span className="sf-swap-icon">⇄</span>
+                <select value={swapB} onChange={e => setSwapB(e.target.value)}>
+                  <option value="">— الشخص الثاني —</option>
+                  {assignments.map(a => <option key={a.giverId} value={a.giverId}>{a.giverName}</option>)}
+                </select>
+              </div>
+              <button className="btn full" style={{ marginTop: 10 }} onClick={doSwap} disabled={!swapA || !swapB}>
+                تنفيذ التبديل
+              </button>
+            </div>
+          )}
+
           <div className="field"><input placeholder="بحث..." value={tableSearch} onChange={e => setTableSearch(e.target.value)} /></div>
           <div className="adm-table-wrap" style={{ maxHeight: 340, overflowY: 'auto' }}>
             <table className="adm-table">
               <thead><tr><th>👤 المخدوم</th><th>🎁 المرسل إليه</th><th>🕵️ الصديق الخفي</th></tr></thead>
               <tbody>
-                {tableShown.map((r, i) => (
-                  <tr key={i}>
-                    <td style={{ fontWeight: 700 }}>{r.person}</td>
-                    <td>{r.giveTo}</td>
-                    <td style={{ color: 'var(--maroon)' }}>{r.secretFriend}</td>
-                  </tr>
-                ))}
+                {tableShownData.map((a) => {
+                  const secretFriend = assignments.find(x => x.receiverId === a.giverId)
+                  return (
+                    <tr key={a.giverId}>
+                      <td style={{ fontWeight: 700 }}>{a.giverName}</td>
+                      <td>{a.receiverName}</td>
+                      <td style={{ color: 'var(--maroon)' }}>{secretFriend ? secretFriend.giverName : '—'}</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

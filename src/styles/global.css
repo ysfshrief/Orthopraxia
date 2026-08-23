@@ -349,3 +349,65 @@ input, select, textarea { font-family: inherit; font-size: 16px; }
   .sf-pulse, .sf-big-icon, .sf-q, .sf-flip-in, .sf-reveal-emoji, .sf-final-title { animation: none !important; }
   .sf-confetti { display: none !important; }
 }
+
+/* ===== Attendance periods + status circle ===== */
+.att-periods { display: flex; flex-direction: column; gap: 6px; direction: rtl; }
+.att-row { display: grid; grid-template-columns: 1fr 1fr 0.8fr 34px; gap: 6px; align-items: center; direction: rtl; }
+.att-row.att-head { font-size: 12px; font-weight: 700; color: var(--muted); padding: 0 2px; }
+.att-row input { width: 100%; padding: 8px; border-radius: 10px; border: 1.5px solid rgba(201,154,58,.4); background: #fffdf8; }
+.att-warn { margin-top: 10px; padding: 10px; border-radius: 10px; background: rgba(178,58,47,.12); color: var(--red); font-weight: 700; font-size: 13px; }
+
+.att-status-wrap { display: flex; justify-content: center; margin-bottom: 8px; }
+.att-circle {
+  width: 180px; height: 180px; border-radius: 50%; border: 6px solid var(--green);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--white); box-shadow: var(--shadow-lg); transition: border-color .4s;
+}
+.att-circle-big { font-size: 54px; font-weight: 900; line-height: 1; }
+.att-circle-label { font-size: 14px; font-weight: 700; color: var(--ink); margin-top: 6px; }
+.att-circle-sub { font-size: 12px; color: var(--muted); margin-top: 4px; text-align: center; padding: 0 8px; }
+
+@media (min-width: 1024px) {
+  .att-circle { width: 220px; height: 220px; }
+  .att-circle-big { font-size: 68px; }
+}
+
+/* ===== Secret friend swap ===== */
+.sf-swap { background: rgba(201,154,58,.1); border: 1.5px dashed var(--gold); border-radius: 14px; padding: 14px; margin-bottom: 14px; }
+.sf-swap-row { display: flex; align-items: center; gap: 8px; }
+.sf-swap-row select { flex: 1; padding: 10px; border-radius: 10px; border: 1.5px solid rgba(201,154,58,.4); background: #fffdf8; }
+.sf-swap-icon { font-size: 22px; color: var(--maroon); }
+
+/* ===== Prayer/Hymns PDF library ===== */
+.lib-cats { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 10px; }
+.lib-cat {
+  border: 2px solid var(--gold); border-radius: 20px; padding: 26px 14px; background: var(--white);
+  display: flex; flex-direction: column; align-items: center; gap: 10px; cursor: pointer;
+  box-shadow: var(--shadow); transition: transform .15s, box-shadow .15s;
+}
+.lib-cat:active { transform: scale(.97); }
+.lib-cat-icon { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; font-size: 30px; color: #fff; }
+.lib-cat-label { font-weight: 900; font-size: 18px; color: var(--ink); }
+.lib-cat-count { font-size: 12px; color: var(--muted); }
+
+.lib-item { display: flex; align-items: stretch; gap: 8px; }
+.lib-item-main {
+  flex: 1; display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 14px;
+  background: var(--white); border: 1px solid rgba(201,154,58,.25); cursor: pointer; text-align: start;
+  box-shadow: var(--shadow); min-width: 0;
+}
+.lib-item-icon { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; font-size: 20px; flex-shrink: 0; }
+.lib-item-name { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-item-actions { display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+
+/* PDF viewer */
+.pdf-viewer-page { display: flex; flex-direction: column; }
+.pdf-viewer-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pdf-viewer-title { font-weight: 800; color: var(--maroon); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; text-align: center; }
+.pdf-frame-wrap { margin-top: 10px; border-radius: 14px; overflow: hidden; border: 2px solid var(--gold); box-shadow: var(--shadow-lg); background: #333; }
+.pdf-frame { width: 100%; height: 72vh; border: none; display: block; }
+
+@media (min-width: 1024px) {
+  .lib-cats { max-width: 560px; margin-inline: auto; }
+  .pdf-frame { height: 80vh; }
+}

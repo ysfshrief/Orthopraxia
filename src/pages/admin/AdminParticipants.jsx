@@ -41,16 +41,10 @@ export default function AdminParticipants({ back, embedded }) {
   const printAll = async () => {
     if (shown.length === 0) return
     toast('جارٍ تجهيز الكارنيهات...', 'ok', 1500)
-    const items = shown.map(p => {
-      const t = teamOf(p)
-      return {
-        qrValue: p.qr || p.id,
-        name: p.name,
-        subtitle: t?.name || '',
-        subColor: t?.color || '#C99A3A',
-        idLabel: `ID: ${p.id}`
-      }
-    })
+    const items = shown.map(p => ({
+      qrValue: p.qr || p.id,
+      name: p.name
+    }))
     const ok = await printCards(items)
     if (!ok) toast('اسمح بالنوافذ المنبثقة (Popups)', 'err')
   }
@@ -161,10 +155,9 @@ export default function AdminParticipants({ back, embedded }) {
       {card && (
         <Modal title="كارنيه المخدوم" onClose={() => setCard(null)}>
           <div className="center-col">
-            <QrCard participant={card} team={teamOf(card)} retreatName="Orthopraxia" />
+            <QrCard participant={card} retreatName="Orthopraxia" />
             <button className="btn full" style={{ marginTop: 16 }} onClick={async () => {
-              const t = teamOf(card)
-              await printCards([{ qrValue: card.qr || card.id, name: card.name, subtitle: t?.name || '', subColor: t?.color || '#C99A3A', idLabel: `ID: ${card.id}` }])
+              await printCards([{ qrValue: card.qr || card.id, name: card.name }])
             }}>
               <Icon name="card" size={18} /> طباعة الكارنيه
             </button>

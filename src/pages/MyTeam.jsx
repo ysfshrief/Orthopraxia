@@ -65,7 +65,7 @@ export default function MyTeam() {
 
       {showCard && (
         <div className="center-col" style={{ marginTop: 14 }}>
-          <QrCard participant={me} team={team} retreatName="Orthopraxia" />
+          <QrCard participant={me} retreatName="Orthopraxia" />
         </div>
       )}
 

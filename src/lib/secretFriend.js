@@ -84,3 +84,28 @@ export const SF_STATUS = {
   REVEALED: 'revealed',// participants see their giveTo
   FINAL: 'final'       // everyone sees both giveTo + secretFriend
 }
+
+/*
+  Swap the RECEIVERS of two givers.
+  Before: A→X , B→Y
+  After : A→Y , B→X
+  Rejected if it would create a self-assignment (A==Y or B==X).
+  Returns { ok, assignments?, error? }
+*/
+export function swapReceivers(assignments, giverIdA, giverIdB) {
+  if (giverIdA === giverIdB) return { ok: false, error: 'اختر شخصين مختلفين' }
+  const a = assignments.find(x => x.giverId === giverIdA)
+  const b = assignments.find(x => x.giverId === giverIdB)
+  if (!a || !b) return { ok: false, error: 'أحد الأشخاص غير موجود في التوزيعة' }
+  // after swap: a gives to b's receiver, b gives to a's receiver
+  if (a.giverId === b.receiverId) return { ok: false, error: 'التبديل هيخلي الشخص موزّع على نفسه' }
+  if (b.giverId === a.receiverId) return { ok: false, error: 'التبديل هيخلي الشخص موزّع على نفسه' }
+  const next = assignments.map(x => {
+    if (x.giverId === giverIdA) return { ...x, receiverId: b.receiverId, receiverName: b.receiverName }
+    if (x.giverId === giverIdB) return { ...x, receiverId: a.receiverId, receiverName: a.receiverName }
+    return x
+  })
+  const check = validateAssignments(next, next.map(z => z.giverId))
+  if (!check.ok) return { ok: false, error: check.error }
+  return { ok: true, assignments: next }
+}

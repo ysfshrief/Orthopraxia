@@ -33,13 +33,13 @@ export default function AdminJudges({ back, embedded }) {
   }
 
   const printOne = async (j) => {
-    const ok = await printCards([{ qrValue: j.qr || j.id, name: j.name, subtitle: 'حكم', subColor: '#6B2318', idLabel: `ID: ${j.id}` }])
+    const ok = await printCards([{ qrValue: j.qr || j.id, name: j.name, roleLabel: 'حكم' }])
     if (!ok) toast('اسمح بالنوافذ المنبثقة', 'err')
   }
   const printAll = async () => {
     if (judges.length === 0) return
     toast('جارٍ تجهيز الكارنيهات...', 'ok', 1500)
-    const items = judges.map(j => ({ qrValue: j.qr || j.id, name: j.name, subtitle: 'حكم', subColor: '#6B2318', idLabel: `ID: ${j.id}` }))
+    const items = judges.map(j => ({ qrValue: j.qr || j.id, name: j.name, roleLabel: 'حكم' }))
     const ok = await printCards(items)
     if (!ok) toast('اسمح بالنوافذ المنبثقة', 'err')
   }
@@ -94,7 +94,7 @@ export default function AdminJudges({ back, embedded }) {
       {card && (
         <Modal title="كارنيه الحكم" onClose={() => setCard(null)}>
           <div className="center-col">
-            <QrCard participant={{ id: card.id, name: card.name, qr: card.qr || card.id }} team={{ name: 'حكم', color: '#6B2318' }} retreatName="Orthopraxia" />
+            <QrCard participant={{ id: card.id, name: card.name, qr: card.qr || card.id }} roleLabel="حكم" retreatName="Orthopraxia" />
             <button className="btn full" style={{ marginTop: 16 }} onClick={() => printOne(card)}>
               <Icon name="card" size={18} /> طباعة الكارنيه
             </button>

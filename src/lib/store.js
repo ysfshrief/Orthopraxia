@@ -1,7 +1,7 @@
 import { DEMO_MODE, db } from './firebase'
 import {
   collection, doc, getDocs, getDoc, setDoc, updateDoc,
-  deleteDoc, onSnapshot, query, where, writeBatch
+  deleteDoc, onSnapshot, query, where, writeBatch, runTransaction
 } from 'firebase/firestore'
 import { SEED } from './seed'
 
@@ -245,3 +245,47 @@ export async function saveSettings(data) {
 }
 
 export { uid, DEMO_MODE }
+
+/*
+  Idempotent attendance recording.
+  Doc ID = `${itemId}__${personId}` so the SAME person can never be recorded
+  twice for the same program item — even if several admins scan at once.
+
+  On Firebase we use a transaction: if the doc already exists, we DO NOTHING
+  (return {duplicate:true}). This makes concurrent scans race-safe at the
+  document level (last-writer can't create a second record).
+
+  NOTE (Spark plan limitation): the `points` value is computed on the client
+  from the device clock. A malicious client could tamper with it via DevTools.
+  For tamper-proof grading, move this into a Cloud Function that reads the
+  server clock and the item's stored periods (requires Blaze). The doc-ID
+  idempotency below still prevents duplicates regardless.
+*/
+export async function recordAttendance({ itemId, personId, personName, teamId, teamName, points, periodLabel, itemTitle, day }) {
+  const docId = `${itemId}__${personId}`
+  const payload = {
+    itemId, personId, personName, teamId, teamName,
+    points: Number(points) || 0, periodLabel: periodLabel || '',
+    itemTitle: itemTitle || '', day: day || '',
+    scanTime: new Date().toISOString(), id: docId
+  }
+  if (DEMO_MODE) {
+    const arr = lsGet('attendanceScans')
+    if (arr.some(x => x.id === docId)) return { duplicate: true }
+    arr.push(payload); lsSet('attendanceScans', arr)
+    return { duplicate: false, record: payload }
+  }
+  try {
+    const result = await runTransaction(db, async (tx) => {
+      const ref = doc(db, 'attendanceScans', docId)
+      const snap = await tx.get(ref)
+      if (snap.exists()) return { duplicate: true }
+      tx.set(ref, payload)
+      return { duplicate: false, record: payload }
+    })
+    return result
+  } catch (e) {
+    // transaction retries exhausted or offline
+    return { error: e.message }
+  }
+}

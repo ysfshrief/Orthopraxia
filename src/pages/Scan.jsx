@@ -1,87 +1,101 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
-import { subscribe, create } from '../lib/store'
+import { subscribe, update, recordAttendance } from '../lib/store'
 import { useData } from '../context/DataContext'
 import { useToast, Header } from '../components/UI'
-import { calcIndividualPoints, tierPoints } from '../lib/points'
+import { validatePeriods, resolveStatus, sortPeriods, fmtClock, defaultPeriods } from '../lib/attendancePeriods'
 import Icon from '../components/Icons'
 
 /*
-  PROPORTIONAL ATTENDANCE SCORING
-  ================================
-  Each scan immediately calculates that individual's point contribution:
-    points = basePoints(tier) / teamSize
-  
-  All scans are saved individually to attendanceScans collection.
-  Per-session totals are tracked in real-time.
-  
-  No need to wait for full-team completion — each person's share
-  is added the moment they scan.
+  Advanced attendance:
+  1) Admin picks a program item.
+  2) Configures multiple timer periods (from/to/points) in a table.
+  3) Start → camera opens; a status circle shows the CURRENT grade,
+     auto-transitioning as real time crosses period boundaries, and
+     showing "انتهى" after the last period.
+  4) Each scan is recorded immediately & idempotently (no Save button);
+     multiple admins can scan concurrently without duplicates.
 */
 
 export default function Scan() {
-  const { teams, participants, settings } = useData()
+  const { participants, teams } = useData()
   const toast = useToast()
   const [program, setProgram] = useState([])
+  const [scans, setScans] = useState([])
   const [itemId, setItemId] = useState('')
+  const [periods, setPeriods] = useState(defaultPeriods())
   const [scanning, setScanning] = useState(false)
-  // sessions: { [teamId]: { scans: [{personId, name, points, time}], teamPts } }
-  const [sessions, setSessions] = useState({})
-  const [allScannedIds, setAllScannedIds] = useState(new Set())
+  const [now, setNow] = useState(Date.now())
   const qrRef = useRef(null)
   const lastScan = useRef({ code: '', t: 0 })
 
   useEffect(() => subscribe('program', arr => {
     arr.sort((a, b) => (a.order || 0) - (b.order || 0)); setProgram(arr)
   }), [])
+  useEffect(() => subscribe('attendanceScans', setScans), [])
+
+  // tick every second while scanning (drives the auto-transition)
+  useEffect(() => {
+    if (!scanning) return
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [scanning])
+
+  const item = program.find(p => p.id === itemId)
+
+  // load periods from the item when selected (or default)
+  useEffect(() => {
+    if (item) {
+      setPeriods(item.attendancePeriods && item.attendancePeriods.length ? item.attendancePeriods : defaultPeriods())
+    }
+  }, [itemId])
+
+  const status = useMemo(() => resolveStatus(periods, new Date(now)), [periods, now])
+
+  // ---- period table editing ----
+  const setRow = (i, patch) => setPeriods(ps => ps.map((p, idx) => idx === i ? { ...p, ...patch } : p))
+  const addRow = () => {
+    const last = periods[periods.length - 1]
+    setPeriods([...periods, { from: last?.to || '19:00', to: '', points: 0 }])
+  }
+  const delRow = (i) => setPeriods(ps => ps.filter((_, idx) => idx !== i))
+
+  const savePeriods = async () => {
+    const v = validatePeriods(periods)
+    if (!v.ok) { toast(v.error, 'err'); return false }
+    await update('program', itemId, { attendancePeriods: sortPeriods(periods) })
+    toast('تم حفظ الفترات', 'ok')
+    return true
+  }
 
   const start = async () => {
     if (!itemId) return toast('اختر الفقرة أولاً', 'warn')
-    setScanning(true)
+    const v = validatePeriods(periods)
+    if (!v.ok) return toast(v.error, 'err')
+    await update('program', itemId, { attendancePeriods: sortPeriods(periods) })
+    setScanning(true); setNow(Date.now())
     setTimeout(initCamera, 100)
-  }
-
-  const resetSession = () => {
-    if (!confirm('بدء جلسة جديدة؟ سيتم مسح قوائم الحضور الحالية من الشاشة (النتائج المحفوظة تبقى).')) return
-    setSessions({})
-    setAllScannedIds(new Set())
-    toast('تم بدء جلسة جديدة', 'ok')
   }
 
   const initCamera = async () => {
     try {
       const qr = new Html5Qrcode('qr-reader')
       qrRef.current = qr
-      await qr.start(
-        { facingMode: 'environment' },
-        { fps: 12, qrbox: { width: 230, height: 230 } },
-        onScan,
-        () => {}
-      )
+      await qr.start({ facingMode: 'environment' }, { fps: 12, qrbox: { width: 240, height: 240 } }, onScan, () => {})
     } catch (e) {
-      toast('تعذّر فتح الكاميرا — تأكد من الإذن', 'err')
-      setScanning(false)
+      toast('تعذّر فتح الكاميرا — تأكد من الإذن', 'err'); setScanning(false)
     }
   }
-
   const stop = async () => {
     try { if (qrRef.current) { await qrRef.current.stop(); qrRef.current.clear() } } catch {}
-    qrRef.current = null
-    setScanning(false)
+    qrRef.current = null; setScanning(false)
   }
   useEffect(() => () => { stop() }, [])
-
-  const onScan = (decoded) => {
-    const now = Date.now()
-    if (decoded === lastScan.current.code && now - lastScan.current.t < 2500) return
-    lastScan.current = { code: decoded, t: now }
-    handleCode(decoded.trim())
-  }
 
   const beep = (type) => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)()
-      const o = ctx.createOscillator(); const g = ctx.createGain()
+      const o = ctx.createOscillator(), g = ctx.createGain()
       o.connect(g); g.connect(ctx.destination)
       o.frequency.value = type === 'ok' ? 880 : 240
       g.gain.value = .12; o.start(); o.stop(ctx.currentTime + .12)
@@ -89,76 +103,50 @@ export default function Scan() {
     if (navigator.vibrate) navigator.vibrate(type === 'ok' ? 60 : [40, 40, 40])
   }
 
-  const handleCode = (code) => {
-    const person = participants.find(p => p.id === code || p.qr === code)
-    if (!person) {
-      beep('err'); toast('QR Code غير صالح أو غير مسجل في النظام', 'err'); return
-    }
+  const onScan = (decoded) => {
+    const t = Date.now()
+    if (decoded === lastScan.current.code && t - lastScan.current.t < 2500) return
+    lastScan.current = { code: decoded, t }
+    handleCode(decoded.trim())
+  }
 
-    // Check if already scanned in THIS session
-    if (allScannedIds.has(person.id)) {
-      beep('err'); toast(`${person.name} — تم تسجيل حضوره بالفعل`, 'err'); return
-    }
+  const handleCode = async (code) => {
+    // re-resolve status at the exact scan moment
+    const st = resolveStatus(periods, new Date())
+    if (st.state === 'ended') { beep('err'); toast('انتهى وقت تسجيل الحضور', 'err'); return }
+    if (st.state === 'before') { beep('err'); toast('لم يبدأ وقت التسجيل بعد', 'warn'); return }
+
+    const person = participants.find(p => p.id === code || p.qr === code)
+    if (!person) { beep('err'); toast('QR غير صالح أو غير مسجّل', 'err'); return }
 
     const tid = person.teamId
-    const teamName = teams.find(t => t.id === tid)?.name || ''
-    const teamSize = participants.filter(p => p.teamId === tid).length
-    const scanTime = new Date()
-    const pts = calcIndividualPoints(scanTime, teamSize, settings.points)
-    const basePts = tierPoints(scanTime, settings.points)
-    const roundPts = Math.round(pts * 100) / 100
+    const teamName = teams.find(x => x.id === tid)?.name || ''
+    const pts = st.points || 0
 
-    // Save scan
-    const item = program.find(p => p.id === itemId)
-    saveScan({
-      personId: person.id, personName: person.name,
+    const res = await recordAttendance({
+      itemId, personId: person.id, personName: person.name,
       teamId: tid, teamName,
-      programItemId: itemId, programItemTitle: item?.title || '',
-      day: item?.day || '',
-      scanTime: scanTime.toISOString(),
-      baseTierPoints: basePts, individualPoints: roundPts, teamSize,
+      points: pts, periodLabel: st.activeIndex >= 0 ? `فترة ${st.activeIndex + 1}` : 'خارج الفترات',
+      itemTitle: item?.title || '', day: item?.day || ''
     })
 
-    // Update session state
-    setAllScannedIds(prev => new Set([...prev, person.id]))
-    setSessions(prev => {
-      const sess = { ...prev }
-      if (!sess[tid]) sess[tid] = { scans: [], teamPts: 0 }
-      const newScans = [...sess[tid].scans, { personId: person.id, name: person.name, points: roundPts, basePts, time: scanTime.toLocaleTimeString('ar-EG') }]
-      const newTeamPts = Math.round(newScans.reduce((s, sc) => s + sc.points, 0) * 100) / 100
-      sess[tid] = { scans: newScans, teamPts: newTeamPts }
-      return sess
+    if (res.duplicate) { beep('err'); toast(`${person.name} — تم تسجيله من قبل`, 'err'); return }
+    if (res.error) { beep('err'); toast('خطأ في الحفظ: ' + res.error, 'err'); return }
+    beep('ok'); toast(`✓ ${person.name} — +${pts}`, 'ok', 1800)
+  }
+
+  // stats for current item
+  const itemScans = scans.filter(s => s.itemId === itemId)
+  const perTeam = useMemo(() => {
+    const m = {}
+    itemScans.forEach(s => {
+      if (!m[s.teamId]) m[s.teamId] = { count: 0, pts: 0 }
+      m[s.teamId].count++; m[s.teamId].pts += (s.points || 0)
     })
+    return m
+  }, [itemScans])
 
-    beep('ok')
-    const presentCount = (sessions[tid]?.scans.length || 0) + 1
-    toast(`✓ ${person.name} — +${roundPts} (${presentCount}/${teamSize})`, 'ok', 2000)
-  }
-
-  const saveScan = async (data) => {
-    await create('attendanceScans', data)
-  }
-
-  // End session: save summary result
-  const endSession = async (tid) => {
-    const sess = sessions[tid]
-    if (!sess || sess.scans.length === 0) return
-    const team = teams.find(t => t.id === tid)
-    const item = program.find(p => p.id === itemId)
-    const teamSize = participants.filter(p => p.teamId === tid).length
-    await create('attendanceResults', {
-      teamId: tid, teamName: team?.name || '',
-      programItemId: itemId, programItemTitle: item?.title || '',
-      day: item?.day || '',
-      completedCount: sess.scans.length, totalCount: teamSize,
-      completionTime: new Date().toISOString(),
-      points: sess.teamPts,
-      details: sess.scans.map(s => ({ name: s.name, points: s.points, basePts: s.basePts, time: s.time }))
-    })
-    toast(`✓ تم حفظ نتيجة ${team?.name}: ${sess.teamPts} نقطة`, 'ok', 3000)
-  }
-
-  const sortedTeams = teams.slice().sort((a, b) => a.order - b.order)
+  const periodValidation = validatePeriods(periods)
 
   return (
     <div className="page">
@@ -168,93 +156,118 @@ export default function Scan() {
         <>
           <div className="card" style={{ marginBottom: 14 }}>
             <div className="field">
-              <label>الفقرة (جلسة الحضور)</label>
+              <label>الفقرة</label>
               <select value={itemId} onChange={e => setItemId(e.target.value)}>
                 <option value="">— اختر الفقرة —</option>
-                {program.map(p => (
-                  <option key={p.id} value={p.id}>{p.day} — {p.title}</option>
-                ))}
+                {program.map(p => <option key={p.id} value={p.id}>{p.day} — {p.title}</option>)}
               </select>
             </div>
-            <button className="btn full" onClick={start}>
-              <Icon name="scan" size={18} /> ابدأ تسجيل الحضور
-            </button>
-            <p className="subtle" style={{ textAlign: 'center', marginTop: 8 }}>
-              صوّر كارنيه أي مخدوم — يتم احتسابه في فريقه تلقائياً
-            </p>
+
+            {itemId && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '8px 0' }}>
+                  <label style={{ fontWeight: 800, color: 'var(--maroon)' }}>فترات الحضور والدرجات</label>
+                  <button className="btn ghost" style={{ padding: '5px 10px', fontSize: 13 }} onClick={addRow}>+ فترة</button>
+                </div>
+                <div className="att-periods">
+                  <div className="att-row att-head">
+                    <span>من</span><span>إلى</span><span>الدرجة</span><span></span>
+                  </div>
+                  {periods.map((p, i) => (
+                    <div className="att-row" key={i}>
+                      <input type="time" value={p.from} onChange={e => setRow(i, { from: e.target.value })} />
+                      <input type="time" value={p.to} onChange={e => setRow(i, { to: e.target.value })} />
+                      <input type="number" value={p.points} onChange={e => setRow(i, { points: e.target.value })} />
+                      <button className="btn ghost" style={{ padding: '4px 6px', color: 'var(--red)' }} onClick={() => delRow(i)} disabled={periods.length <= 1}>
+                        <Icon name="trash" size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {!periodValidation.ok && <div className="att-warn">⚠️ {periodValidation.error}</div>}
+
+                <button className="btn full" style={{ marginTop: 12 }} onClick={start} disabled={!periodValidation.ok}>
+                  <Icon name="scan" size={18} /> بدء التسجيل
+                </button>
+                <p className="subtle" style={{ textAlign: 'center', marginTop: 8 }}>
+                  الكاميرا هتفتح وتنتقل الدرجة أوتوماتيك حسب الوقت
+                </p>
+              </>
+            )}
           </div>
 
-          {/* live sessions summary */}
-          {Object.keys(sessions).length > 0 && (
+          {itemId && Object.keys(perTeam).length > 0 && (
             <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 className="section-title" style={{ marginBottom: 0 }}>الفرق في هذه الجلسة</h3>
-                <button className="btn ghost" style={{ padding: '6px 12px' }} onClick={resetSession}>جلسة جديدة</button>
-              </div>
-              {Object.entries(sessions).map(([tid, s]) => {
-                const t = teams.find(x => x.id === tid)
-                const size = participants.filter(p => p.teamId === tid).length
-                return (
-                  <div key={tid} className="card" style={{ marginBottom: 10, borderInlineStart: `5px solid ${t?.color || 'var(--gold)'}` }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800 }}>
-                      <span>{t?.name}</span>
-                      <span style={{ color: 'var(--maroon)' }}>{s.teamPts} نقطة</span>
-                    </div>
-                    <div className="subtle">{s.scans.length}/{size} حضور</div>
-                    <Progress value={s.scans.length} max={size} />
-                    {/* details */}
-                    <details style={{ marginTop: 8 }}>
-                      <summary className="subtle" style={{ cursor: 'pointer' }}>تفاصيل الحضور</summary>
-                      <div style={{ marginTop: 6, fontSize: 13 }}>
-                        {s.scans.map((sc, i) => (
-                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid rgba(201,154,58,.15)' }}>
-                            <span>{sc.name}</span>
-                            <span style={{ color: 'var(--green)', fontWeight: 700 }}>+{sc.points} ({sc.time})</span>
-                          </div>
-                        ))}
-                      </div>
-                    </details>
-                    <button className="btn ghost full" style={{ marginTop: 8 }} onClick={() => endSession(tid)}>
-                      <Icon name="check" size={16} /> حفظ نتيجة الفريق
-                    </button>
-                  </div>
-                )
-              })}
+              <h3 className="section-title">حضور هذه الفقرة</h3>
+              {teams.filter(t => perTeam[t.id]).sort((a,b)=>a.order-b.order).map(t => (
+                <div key={t.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderInlineStart: `5px solid ${t.color}` }}>
+                  <span style={{ fontWeight: 800 }}>{t.name}</span>
+                  <span className="subtle">{perTeam[t.id].count} حضور • {perTeam[t.id].pts} نقطة</span>
+                </div>
+              ))}
             </>
           )}
         </>
       ) : (
         <>
-          <div className="card" style={{ marginBottom: 12, textAlign: 'center' }}>
-            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 6 }}>صوّر كارنيه أي مخدوم من أي فريق</div>
-            {Object.entries(sessions).map(([tid, s]) => {
-              const t = teams.find(x => x.id === tid)
-              const size = participants.filter(p => p.teamId === tid).length
-              return (
-                <div key={tid} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
-                  <span style={{ fontWeight: 700, color: t?.color }}>{t?.name}</span>
-                  <span style={{ fontWeight: 800 }}>{s.scans.length}/{size} — {s.teamPts} ن</span>
-                </div>
-              )
-            })}
+          {/* status circle */}
+          <div className="att-status-wrap">
+            <StatusCircle status={status} periods={periods} />
           </div>
-          <div id="qr-reader" style={{ width: '100%', borderRadius: 18, overflow: 'hidden', border: '2px solid var(--gold)' }} />
-          <button className="btn red full" style={{ marginTop: 14 }} onClick={stop}>إيقاف الماسح</button>
+
+          {status.state !== 'ended' ? (
+            <div id="qr-reader" style={{ width: '100%', borderRadius: 18, overflow: 'hidden', border: '2px solid var(--gold)', marginTop: 8 }} />
+          ) : (
+            <div className="card" style={{ textAlign: 'center', marginTop: 8 }}>
+              <div style={{ fontSize: 40 }}>⛔</div>
+              <div style={{ fontWeight: 800, color: 'var(--red)' }}>انتهى تسجيل الحضور</div>
+              <div className="subtle">لا يمكن تسجيل حضور جديد</div>
+            </div>
+          )}
+
+          {/* live per-team tally */}
+          {Object.keys(perTeam).length > 0 && (
+            <div className="card" style={{ marginTop: 12 }}>
+              {teams.filter(t => perTeam[t.id]).sort((a,b)=>a.order-b.order).map(t => (
+                <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                  <span style={{ fontWeight: 700, color: t.color }}>{t.name}</span>
+                  <span style={{ fontWeight: 800 }}>{perTeam[t.id].count} • {perTeam[t.id].pts} ن</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button className="btn red full" style={{ marginTop: 14 }} onClick={stop}>إنهاء الماسح</button>
         </>
       )}
     </div>
   )
 }
 
-function Progress({ value, max }) {
-  const pct = max ? Math.min(100, (value / max) * 100) : 0
+function StatusCircle({ status, periods }) {
+  let big, label, color, sub
+  if (status.state === 'before') {
+    big = '⏳'; label = 'لم يبدأ بعد'; color = 'var(--muted)'
+    sub = `يبدأ ${fmtClock(sortPeriods(periods)[0].from)}`
+  } else if (status.state === 'ended') {
+    big = '⛔'; label = 'انتهى'; color = 'var(--red)'; sub = 'تم إغلاق التسجيل'
+  } else if (status.gap) {
+    big = '⏸'; label = 'بين الفترات'; color = 'var(--gold)'; sub = '0 نقطة حالياً'
+  } else {
+    big = status.points; label = 'الدرجة الحالية'; color = 'var(--green)'
+    sub = `الفترة ${status.activeIndex + 1} • تنتهي ${fmtClock(minToHHMM(status.endsAtMin))}`
+  }
   return (
-    <div style={{ height: 12, borderRadius: 999, background: 'rgba(201,154,58,.2)', overflow: 'hidden', marginTop: 8 }}>
-      <div style={{
-        height: '100%', width: pct + '%',
-        background: 'linear-gradient(90deg,var(--gold-2),var(--gold))',
-        transition: 'width .3s ease'
-      }} />
+    <div className="att-circle" style={{ borderColor: color }}>
+      <div className="att-circle-big" style={{ color }}>{big}</div>
+      <div className="att-circle-label">{label}</div>
+      <div className="att-circle-sub">{sub}</div>
     </div>
   )
+}
+
+function minToHHMM(mins) {
+  if (mins == null) return ''
+  const h = Math.floor(mins / 60), m = Math.round(mins % 60)
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`
 }
