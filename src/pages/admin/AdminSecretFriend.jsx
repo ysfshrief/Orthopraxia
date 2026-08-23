@@ -128,7 +128,6 @@ export default function AdminSecretFriend({ back, embedded }) {
   }
 
   const tableShownData = assignments.filter(a => !tableSearch || a.giverName.includes(tableSearch))
-  const tableShown = table.filter(r => !tableSearch || r.person.includes(tableSearch))
 
   if (!settings) return <div className="page"><Header title="الصديق الخفي" back={back} /><div className="empty"><div className="spinner" /></div></div>
 
