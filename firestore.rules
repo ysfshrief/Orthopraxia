@@ -1,11 +1,75 @@
 rules_version = '2';
+
+// ============================================================================
+//  Orthopraxia — Firestore Security Rules
+// ----------------------------------------------------------------------------
+//  الصدق أولاً: الموقع الحالي بيشتغل من غير Firebase Auth (بيستخدم أعلام
+//  في sessionStorage للأدمن/الحكم). معنى كده إن Firestore مش بيعرف مين اللي
+//  بيكلّمه، فمش قادر يفرض "الحكم يقرا درجاته بس" على مستوى القاعدة.
+//
+//  اللي القواعد دي بتعمله (تحسينات حقيقية ممكنة من غير Auth):
+//   1) تمنع حذف/تعديل سجلّات الحضور (sessionScans) — تبقى immutable، فمحدش
+//      يقدر يمسح حضور أو يغيّر الفترة بعد التسجيل.
+//   2) تفرض شكل (schema) للحقول المهمة عشان متتكتبش بيانات مشوّهة.
+//   3) تمنع الكتابة في مجموعات مش معروفة.
+//
+//  اللي *مش* ممكن من غير Blaze + Firebase Auth:
+//   - إخفاء درجات الحكام عن بعض على مستوى القراءة (أي حد يقدر يقرا
+//     judgePoints من DevTools). الإخفاء الحالي في الواجهة بس.
+//   - وقت السيرفر كمصدر حقيقة (بنخزّن startedAt وبنشتقّ منه — أقرب حل ممكن).
+//   - unique constraint حقيقي (بنستخدم docId = sessionId__participantId +
+//     transaction، وده بيمنع التكرار عملياً).
+//
+//  لما تعمل Upgrade لـ Blaze: نفعّل Firebase Auth، ونحط هنا
+//  allow read: if request.auth.uid == resource.data.judgeUid لعزل الحكام
+//  فعلياً، ونحوّل تسجيل الحضور لـ Cloud Function بوقت سيرفر.
+// ============================================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // القراءة متاحة للجميع (موقع عام). الكتابة تتم من التطبيق.
-    // للإنتاج يفضّل ربط الكتابة بحساب Admin عبر Firebase Auth.
-    match /{document=**} {
+
+    // سجلّات حضور الجلسة: تتكتب مرة واحدة، ممنوع تعديلها أو حذفها
+    match /sessionScans/{scanId} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasAll(['sessionId','participantId','periodIndex'])
+                    && request.resource.data.participantId is string
+                    && request.resource.data.sessionId is string
+                    && request.resource.data.periodIndex is number;
+      allow update: if false;   // immutable
+      allow delete: if false;   // لا يمكن مسح حضور
+    }
+
+    // نتائج الحضور المجمّعة (يكتبها الأدمن عند الاعتماد)
+    match /attendanceResults/{id} {
       allow read: if true;
       allow write: if true;
+    }
+
+    // درجات الحكم/الأدمن — القراءة عامة (قيد Spark)، الكتابة بشكل صحيح
+    match /judgePoints/{id} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasAll(['teamId','points','judgeId'])
+                    && request.resource.data.points is number;
+      allow update: if false;
+      allow delete: if true;
+    }
+
+    match /settings/{doc}      { allow read: if true; allow write: if true; }
+    match /teams/{id}          { allow read: if true; allow write: if true; }
+    match /participants/{id}   { allow read: if true; allow write: if true; }
+    match /judges/{id}         { allow read: if true; allow write: if true; }
+    match /program/{id}        { allow read: if true; allow write: if true; }
+    match /secretFriend/{id}   { allow read: if true; allow write: if true; }
+    match /videos/{id}         { allow read: if true; allow write: if true; }
+    match /mainVideos/{id}     { allow read: if true; allow write: if true; }
+    match /competitions/{id}   { allow read: if true; allow write: if true; }
+    match /audio/{id}          { allow read: if true; allow write: if true; }
+    match /notifications/{id}  { allow read: if true; allow write: if true; }
+    match /attendanceScans/{id}{ allow read: if true; allow write: if true; }
+
+    match /{document=**} {
+      allow read: if true;
+      allow write: if false;
     }
   }
 }

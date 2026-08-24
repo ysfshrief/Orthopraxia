@@ -246,6 +246,75 @@ export async function saveSettings(data) {
 
 export { uid, DEMO_MODE }
 
+/* ===================== ATTENDANCE SESSION ===================== *
+   Single shared session document at settings/attendanceSession.
+   All admin devices subscribe to it → same session, same central startedAt.
+   Scans go to `sessionScans` with docId = `${sessionId}__${participantId}`
+   so a person can be recorded ONCE per whole session, race-safe via
+   transaction (concurrent scans on two devices can't double-insert).
+*/
+export function subscribeSession(cb) {
+  if (DEMO_MODE) {
+    const handler = () => cb(lsGet('attendanceSession')[0] || null)
+    window.addEventListener('ortho-change', handler)
+    cb(lsGet('attendanceSession')[0] || null)
+    return () => window.removeEventListener('ortho-change', handler)
+  }
+  return onSnapshot(doc(db, 'settings', 'attendanceSession'), snap => {
+    cb(snap.exists() ? snap.data() : null)
+  })
+}
+
+export async function saveSession(data) {
+  if (DEMO_MODE) { lsSet('attendanceSession', [data]); return }
+  await setDoc(doc(db, 'settings', 'attendanceSession'), data, { merge: true })
+}
+
+export function subscribeSessionScans(cb) {
+  if (DEMO_MODE) {
+    const handler = () => cb(lsGet('sessionScans'))
+    window.addEventListener('ortho-change', handler)
+    cb(lsGet('sessionScans'))
+    return () => window.removeEventListener('ortho-change', handler)
+  }
+  return onSnapshot(collection(db, 'sessionScans'), snap => {
+    cb(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+  })
+}
+
+/*
+  Record one session scan.
+  The caller passes the periodIndex/points resolved from the CENTRAL session
+  time at scan moment. Grade share is derived later from team size, so we store
+  the period the person attended in, not a pre-baked per-person number.
+*/
+export async function recordSessionScan({ sessionId, participantId, personName, teamId, teamName, periodIndex }) {
+  const docId = `${sessionId}__${participantId}`
+  const payload = {
+    sessionId, participantId, personName: personName || '',
+    teamId: teamId || '', teamName: teamName || '',
+    periodIndex: Number(periodIndex), scanTime: new Date().toISOString(), id: docId
+  }
+  if (DEMO_MODE) {
+    const arr = lsGet('sessionScans')
+    if (arr.some(x => x.id === docId)) return { duplicate: true }
+    arr.push(payload); lsSet('sessionScans', arr)
+    return { duplicate: false, record: payload }
+  }
+  try {
+    return await runTransaction(db, async (tx) => {
+      const ref = doc(db, 'sessionScans', docId)
+      const snap = await tx.get(ref)
+      if (snap.exists()) return { duplicate: true }
+      tx.set(ref, payload)
+      return { duplicate: false, record: payload }
+    })
+  } catch (e) {
+    return { error: e.message }
+  }
+}
+
+
 /*
   Idempotent attendance recording.
   Doc ID = `${itemId}__${personId}` so the SAME person can never be recorded

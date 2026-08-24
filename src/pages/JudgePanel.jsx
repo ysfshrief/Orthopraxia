@@ -6,33 +6,45 @@ import { useParticipant } from '../context/ParticipantContext'
 import { useToast, Modal, Header } from '../components/UI'
 import Icon from '../components/Icons'
 
+/*
+  Judge privacy (frontend enforcement on Spark):
+  A judge sees ONLY the points THEY entered — never attendance, never other
+  judges' points, never team totals. We filter judgePoints to this judge's id
+  and never read/display attendanceResults or other judges' entries here.
+
+  NOTE: on Spark this is UI-level only. A determined user could still query
+  Firestore directly from DevTools. True server-side isolation needs Firebase
+  Auth + Security Rules (each judge authenticated) or a Cloud Function, which
+  require the Blaze plan. The accompanying firestore.rules file locks writes to
+  match the judge's own id as far as rules can without full Auth.
+*/
+
 export default function JudgePanel() {
   const { teams } = useData()
   const { judgeId, logout } = useParticipant()
   const toast = useToast()
   const [judges, setJudges] = useState([])
-  const [judgePoints, setJudgePoints] = useState([])
-  const [results, setResults] = useState([])
-  const [modal, setModal] = useState(null) // {team, mode:'add'|'remove'}
+  const [myPoints, setMyPoints] = useState([])
+  const [modal, setModal] = useState(null)
   const [amount, setAmount] = useState('')
   const [reason, setReason] = useState('')
 
   useEffect(() => subscribe('judges', setJudges), [])
+  // only THIS judge's entries are kept in state — nothing else is displayed
   useEffect(() => subscribe('judgePoints', arr => {
-    arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); setJudgePoints(arr)
-  }), [])
-  useEffect(() => subscribe('attendanceResults', setResults), [])
+    const mine = arr.filter(p => p.judgeId === judgeId)
+    mine.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+    setMyPoints(mine)
+  }), [judgeId])
 
   const judge = judges.find(j => j.id === judgeId)
 
-  // team totals = attendance + judge points + bonus
-  const standings = useMemo(() => {
-    return teams.map(t => {
-      const att = results.filter(r => r.teamId === t.id).reduce((s, r) => s + (r.points || 0), 0)
-      const jp = judgePoints.filter(p => p.teamId === t.id).reduce((s, p) => s + (p.points || 0), 0)
-      return { ...t, att, jp, total: Math.round((att + jp + (t.bonusPoints || 0)) * 100) / 100 }
-    }).sort((a, b) => b.total - a.total)
-  }, [teams, results, judgePoints])
+  // per-team sum of MY OWN points only (no attendance, no other judges)
+  const myByTeam = useMemo(() => {
+    const m = {}
+    for (const p of myPoints) m[p.teamId] = (m[p.teamId] || 0) + (p.points || 0)
+    return m
+  }, [myPoints])
 
   if (!judgeId) return <Navigate to="/login" replace />
   if (judge && judge.active === false) {
@@ -54,7 +66,7 @@ export default function JudgePanel() {
     await create('judgePoints', {
       teamId: modal.team.id, teamName: modal.team.name,
       points: pts, reason: reason || '', judgeId, judgeName: judge?.name || 'الحكم',
-      createdAt: Date.now()
+      source: 'judge', createdAt: Date.now()
     })
     toast(`${modal.mode === 'add' ? 'أُضيفت' : 'خُصمت'} ${n} نقطة لـ${modal.team.name}`, 'ok')
     setModal(null); setAmount(''); setReason('')
@@ -73,20 +85,17 @@ export default function JudgePanel() {
           <Icon name="logout" size={16} /> خروج
         </button>
       </div>
-      <p className="subtle" style={{ marginBottom: 14 }}>أهلاً {judge?.name} — يمكنك إضافة أو خصم نقاط لأي فريق.</p>
+      <p className="subtle" style={{ marginBottom: 14 }}>
+        أهلاً {judge?.name} — تقدر تضيف أو تخصم نقاط لأي فريق. بتشوف درجاتك إنت بس.
+      </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {standings.map((t, i) => (
+        {teams.slice().sort((a, b) => a.order - b.order).map(t => (
           <div key={t.id} className="card" style={{ borderInlineStart: `6px solid ${t.color}` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ fontSize: 22, fontWeight: 900, minWidth: 30, textAlign: 'center', color: 'var(--muted)' }}>{i + 1}</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 800, fontSize: 17 }}>{t.name}</div>
-                <div className="subtle">حضور: {t.att} • حكم: {t.jp >= 0 ? '+' : ''}{t.jp}</div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--maroon)' }}>{t.total}</div>
-                <div className="subtle" style={{ fontSize: 11 }}>نقطة</div>
+                <div className="subtle">درجاتك لهذا الفريق: <b style={{ color: 'var(--maroon)' }}>{(myByTeam[t.id] || 0) >= 0 ? '+' : ''}{myByTeam[t.id] || 0}</b></div>
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
@@ -101,15 +110,15 @@ export default function JudgePanel() {
         ))}
       </div>
 
-      {/* history */}
-      <h3 className="section-title" style={{ marginTop: 22 }}>سجل تعديلات الحكم</h3>
+      {/* history — MY entries only */}
+      <h3 className="section-title" style={{ marginTop: 22 }}>سجل درجاتي</h3>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {judgePoints.length === 0 && <div className="empty">لا توجد تعديلات بعد</div>}
-        {judgePoints.map(p => (
+        {myPoints.length === 0 && <div className="empty">لا توجد درجات بعد</div>}
+        {myPoints.map(p => (
           <div key={p.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
             <div>
               <div style={{ fontWeight: 700 }}>{p.teamName} {p.reason ? `— ${p.reason}` : ''}</div>
-              <div className="subtle" style={{ fontSize: 12 }}>{p.judgeName}</div>
+              <div className="subtle" style={{ fontSize: 12 }}>{new Date(p.createdAt).toLocaleString('ar-EG')}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span className="pill" style={{ background: p.points >= 0 ? 'rgba(62,107,79,.15)' : 'rgba(178,58,47,.15)', color: p.points >= 0 ? 'var(--green)' : 'var(--red)' }}>

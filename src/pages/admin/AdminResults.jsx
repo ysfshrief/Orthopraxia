@@ -23,8 +23,11 @@ export default function AdminResults({ back, embedded }) {
 
   const standings = useMemo(() => teams.map(t => {
     const att = results.filter(r => r.teamId === t.id).reduce((s, r) => s + (r.points || 0), 0)
-    const jp = judgePoints.filter(p => p.teamId === t.id).reduce((s, p) => s + (p.points || 0), 0)
-    return { ...t, att, jp, total: Math.round((att + jp + (t.bonusPoints || 0)) * 100) / 100 }
+    const teamPts = judgePoints.filter(p => p.teamId === t.id)
+    const judgeSum = teamPts.filter(p => p.source !== 'admin' && p.judgeId !== 'admin').reduce((s, p) => s + (p.points || 0), 0)
+    const adminSum = teamPts.filter(p => p.source === 'admin' || p.judgeId === 'admin').reduce((s, p) => s + (p.points || 0), 0)
+    const jp = judgeSum + adminSum
+    return { ...t, att, jp, judgeSum, adminSum, total: Math.round((att + jp + (t.bonusPoints || 0)) * 100) / 100 }
   }).sort((a, b) => b.total - a.total), [teams, results, judgePoints])
 
   const save = async () => {
@@ -40,7 +43,7 @@ export default function AdminResults({ back, embedded }) {
     await create('judgePoints', {
       teamId: ptModal.team.id, teamName: ptModal.team.name,
       points: pts, reason: reason || '', judgeId: 'admin', judgeName: 'الإدارة',
-      createdAt: Date.now()
+      source: 'admin', createdAt: Date.now()
     })
     toast(`${ptModal.mode === 'add' ? 'أُضيفت' : 'خُصمت'} ${n} نقطة لـ${ptModal.team.name}`, 'ok')
     setPtModal(null); setAmount(''); setReason('')
@@ -62,7 +65,9 @@ export default function AdminResults({ back, embedded }) {
               <div style={{ fontSize: 20, fontWeight: 900, minWidth: 26, textAlign: 'center', color: 'var(--muted)' }}>{i + 1}</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 800 }}>{t.name}</div>
-                <div className="subtle">حضور: {t.att} • يدوي: {t.jp >= 0 ? '+' : ''}{t.jp}</div>
+                <div className="subtle" style={{ fontSize: 12 }}>
+                  حضور: <b>{t.att}</b> • حكم: <b>{t.judgeSum >= 0 ? '+' : ''}{t.judgeSum}</b> • إدارة: <b>{t.adminSum >= 0 ? '+' : ''}{t.adminSum}</b>
+                </div>
               </div>
               <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--maroon)' }}>{t.total}</div>
             </div>

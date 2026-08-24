@@ -1,126 +1,119 @@
 import { useEffect, useState, useRef, useMemo } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
-import { subscribe, update, upsert, recordAttendance } from '../lib/store'
+import {
+  subscribe, upsert, subscribeSession, saveSession,
+  subscribeSessionScans, recordSessionScan
+} from '../lib/store'
 import { useData } from '../context/DataContext'
 import { useToast, Header } from '../components/UI'
-import { validatePeriods, resolveStatus, sortPeriods, fmtClock, defaultPeriods } from '../lib/attendancePeriods'
+import {
+  newSessionId, defaultSessionPeriods, validateSessionPeriods,
+  resolveSession, fmtRemaining, computeTeamScores
+} from '../lib/attendanceSession'
 import Icon from '../components/Icons'
 
 /*
-  Advanced attendance:
-  1) Admin picks a program item.
-  2) Configures multiple timer periods (from/to/points) in a table.
-  3) Start → camera opens; a status circle shows the CURRENT grade,
-     auto-transitioning as real time crosses period boundaries, and
-     showing "انتهى" after the last period.
-  4) Each scan is recorded immediately & idempotently (no Save button);
-     multiple admins can scan concurrently without duplicates.
+  Central attendance SESSION scanner.
+  - One shared session (settings/attendanceSession) drives every device.
+  - Current period + remaining time are DERIVED from the stored startedAt,
+    so refresh / late-open / multi-device all agree.
+  - Each person is scanned ONCE per session (docId sessionId__participantId,
+    transaction-guarded → no duplicates even with concurrent admins).
+  - Team score = periodPoints * (present / totalMembers), computed live.
 */
 
 export default function Scan() {
   const { participants, teams } = useData()
   const toast = useToast()
-  const [program, setProgram] = useState([])
+  const [session, setSession] = useState(null)
   const [scans, setScans] = useState([])
-  const [itemId, setItemId] = useState('')
-  const [periods, setPeriods] = useState(defaultPeriods())
-  const [scanning, setScanning] = useState(false)
-  const [camFailed, setCamFailed] = useState(false)
+  const [periods, setPeriods] = useState(defaultSessionPeriods())
   const [now, setNow] = useState(Date.now())
+  const [camFailed, setCamFailed] = useState(false)
   const qrRef = useRef(null)
   const lastScan = useRef({ code: '', t: 0 })
 
-  useEffect(() => subscribe('program', arr => {
-    arr.sort((a, b) => (a.order || 0) - (b.order || 0)); setProgram(arr)
-  }), [])
-  useEffect(() => subscribe('attendanceScans', setScans), [])
+  useEffect(() => subscribeSession(setSession), [])
+  useEffect(() => subscribeSessionScans(setScans), [])
 
-  // tick every second while scanning (drives the auto-transition)
+  // shared clock tick (drives period display derived from central startedAt)
   useEffect(() => {
-    if (!scanning) return
     const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
-  }, [scanning])
+  }, [])
 
-  // start the camera only once the #qr-reader element is actually in the DOM
-  // (it renders only while scanning && not ended). Retries briefly if needed.
+  const status = useMemo(() => resolveSession(session, now), [session, now])
+  const isActive = status.state === 'active'
+  const isScannerOpen = session && session.status === 'active' // camera stays open whole session
+
+  // ----- session control (admin) -----
+  const setRow = (i, patch) => setPeriods(ps => ps.map((p, idx) => idx === i ? { ...p, ...patch } : p))
+  const addRow = () => setPeriods(ps => [...ps, { minutes: 10, points: 50 }])
+  const delRow = (i) => setPeriods(ps => ps.filter((_, idx) => idx !== i))
+
+  const startSession = async () => {
+    const v = validateSessionPeriods(periods)
+    if (!v.ok) return toast(v.error, 'err')
+    const sess = {
+      id: newSessionId(),
+      startedAt: new Date().toISOString(), // central shared reference
+      periods: periods.map(p => ({ minutes: Number(p.minutes), points: Number(p.points) })),
+      status: 'active', endedAt: null,
+      createdAt: new Date().toISOString(),
+    }
+    await saveSession(sess)
+    setCamFailed(false); setNow(Date.now())
+    toast('بدأت الجلسة ✓', 'ok')
+  }
+
+  const endSession = async () => {
+    if (!session) return
+    if (!confirm('إنهاء الجلسة؟ لن يمكن تسجيل حضور بعد ذلك.')) return
+    await saveSession({ ...session, status: 'ended', endedAt: new Date().toISOString() })
+    await stopCamera()
+    toast('انتهت الجلسة', 'warn')
+  }
+
+  // auto-end when time runs out (any device that notices persists it once)
   useEffect(() => {
-    if (!scanning) return
-    if (qrRef.current) return // already running
-    if (camFailed) return // user must press retry
-    let cancelled = false
-    let tries = 0
+    if (session && session.status === 'active' && status.state === 'ended') {
+      saveSession({ ...session, status: 'ended', endedAt: new Date().toISOString() })
+    }
+  }, [status.state, session])
+
+  // ----- camera -----
+  useEffect(() => {
+    if (!isScannerOpen) { stopCamera(); return }
+    if (qrRef.current || camFailed) return
+    let cancelled = false, tries = 0
     const tryInit = () => {
       if (cancelled) return
       const el = document.getElementById('qr-reader')
       if (el && !qrRef.current) { initCamera(); return }
-      if (tries++ < 20) setTimeout(tryInit, 100) // wait up to ~2s for the element
+      if (tries++ < 20) setTimeout(tryInit, 100)
     }
     tryInit()
     return () => { cancelled = true }
-  }, [scanning, camFailed])
-
-  const item = program.find(p => p.id === itemId)
-
-  // load periods from the item when selected (or default)
-  useEffect(() => {
-    if (item) {
-      setPeriods(item.attendancePeriods && item.attendancePeriods.length ? item.attendancePeriods : defaultPeriods())
-    }
-  }, [itemId])
-
-  const status = useMemo(() => resolveStatus(periods, new Date(now)), [periods, now])
-
-  // ---- period table editing ----
-  const setRow = (i, patch) => setPeriods(ps => ps.map((p, idx) => idx === i ? { ...p, ...patch } : p))
-  const addRow = () => {
-    const last = periods[periods.length - 1]
-    setPeriods([...periods, { from: last?.to || '19:00', to: '', points: 0 }])
-  }
-  const delRow = (i) => setPeriods(ps => ps.filter((_, idx) => idx !== i))
-
-  const savePeriods = async () => {
-    const v = validatePeriods(periods)
-    if (!v.ok) { toast(v.error, 'err'); return false }
-    await update('program', itemId, { attendancePeriods: sortPeriods(periods) })
-    toast('تم حفظ الفترات', 'ok')
-    return true
-  }
-
-  const start = async () => {
-    if (!itemId) return toast('اختر الفقرة أولاً', 'warn')
-    const v = validatePeriods(periods)
-    if (!v.ok) return toast(v.error, 'err')
-    await update('program', itemId, { attendancePeriods: sortPeriods(periods) })
-    setScanning(true); setNow(Date.now()); setCamFailed(false)
-  }
-
-  const retryCamera = async () => {
-    setCamFailed(false)
-    try { if (qrRef.current) { await qrRef.current.stop(); qrRef.current.clear() } } catch {}
-    qrRef.current = null
-    setTimeout(initCamera, 200)
-  }
+  }, [isScannerOpen, camFailed])
 
   const initCamera = async () => {
     if (qrRef.current) return
-    const el = document.getElementById('qr-reader')
-    if (!el) return
+    if (!document.getElementById('qr-reader')) return
     try {
       const qr = new Html5Qrcode('qr-reader')
       await qr.start({ facingMode: 'environment' }, { fps: 12, qrbox: { width: 240, height: 240 } }, onScan, () => {})
-      qrRef.current = qr // only mark running after a successful start
+      qrRef.current = qr
     } catch (e) {
-      // clean up any half-initialized instance and let the user retry
       toast('تعذّر فتح الكاميرا — اضغط "إعادة المحاولة"', 'err')
       setCamFailed(true)
     }
   }
-  const stop = async () => {
+  const stopCamera = async () => {
     try { if (qrRef.current) { await qrRef.current.stop(); qrRef.current.clear() } } catch {}
-    qrRef.current = null; setScanning(false)
+    qrRef.current = null
   }
-  useEffect(() => () => { stop() }, [])
+  const retryCamera = async () => { setCamFailed(false); await stopCamera(); setTimeout(initCamera, 200) }
+  useEffect(() => () => { stopCamera() }, [])
 
   const beep = (type) => {
     try {
@@ -141,218 +134,173 @@ export default function Scan() {
   }
 
   const handleCode = async (code) => {
-    // re-resolve status at the exact scan moment
-    const st = resolveStatus(periods, new Date())
-    if (st.state === 'ended') { beep('err'); toast('انتهى وقت تسجيل الحضور', 'err'); return }
-    if (st.state === 'before') { beep('err'); toast('لم يبدأ وقت التسجيل بعد', 'warn'); return }
+    // re-resolve from central session at the exact scan moment
+    const st = resolveSession(session, Date.now())
+    if (st.state === 'ended' || !session || session.status !== 'active') {
+      beep('err'); toast('✕ انتهت الجلسة — تسجيل الحضور مغلق', 'err'); return
+    }
+    if (st.state !== 'active') { beep('err'); toast('✕ لا يمكن تسجيل الحضور حالياً', 'warn'); return }
 
     const person = participants.find(p => p.id === code || p.qr === code)
-    if (!person) { beep('err'); toast('QR غير صالح أو غير مسجّل', 'err'); return }
+    if (!person) { beep('err'); toast('✕ QR غير صالح أو غير مسجّل', 'err'); return }
 
-    const tid = person.teamId
-    const teamName = teams.find(x => x.id === tid)?.name || ''
-    const pts = st.points || 0
-
-    const res = await recordAttendance({
-      itemId, personId: person.id, personName: person.name,
-      teamId: tid, teamName,
-      points: pts, periodLabel: st.activeIndex >= 0 ? `فترة ${st.activeIndex + 1}` : 'خارج الفترات',
-      itemTitle: item?.title || '', day: item?.day || ''
+    const teamName = teams.find(x => x.id === person.teamId)?.name || ''
+    const res = await recordSessionScan({
+      sessionId: session.id, participantId: person.id, personName: person.name,
+      teamId: person.teamId, teamName, periodIndex: st.periodIndex
     })
-
-    if (res.duplicate) { beep('err'); toast(`${person.name} — تم تسجيله من قبل`, 'err'); return }
+    if (res.duplicate) { beep('err'); toast(`⚠ ${person.name} — تم تسجيله بالفعل في هذه الجلسة`, 'err'); return }
     if (res.error) { beep('err'); toast('خطأ في الحفظ: ' + res.error, 'err'); return }
-    beep('ok'); toast(`✓ ${person.name} — +${pts}`, 'ok', 1800)
+    beep('ok'); toast(`✓ تم تسجيل ${person.name} (فترة ${st.periodIndex + 1})`, 'ok', 1800)
   }
 
-  // stats for current item
-  const itemScans = scans.filter(s => s.itemId === itemId)
-  const perTeam = useMemo(() => {
-    const m = {}
-    itemScans.forEach(s => {
-      if (!m[s.teamId]) m[s.teamId] = { count: 0, pts: 0 }
-      m[s.teamId].count++; m[s.teamId].pts += (s.points || 0)
-    })
-    return m
-  }, [itemScans])
+  // ----- live scores -----
+  const sessionScans = useMemo(
+    () => scans.filter(s => session && s.sessionId === session.id),
+    [scans, session]
+  )
+  const teamScores = useMemo(
+    () => computeTeamScores(sessionScans, teams, participants, session?.periods || []),
+    [sessionScans, teams, participants, session]
+  )
 
-  const periodValidation = validatePeriods(periods)
-
-  // Aggregate this item's scans into per-team attendanceResults rows so the
-  // points show up in the admin standings / leaderboard. Uses a stable doc id
-  // `${itemId}__${teamId}` via upsert, so pressing the button again just
-  // refreshes the totals instead of creating duplicates.
+  // commit final results into attendanceResults for the admin standings
   const [committing, setCommitting] = useState(false)
   const commitToTeams = async () => {
-    if (!itemId) return toast('اختر الفقرة أولاً', 'warn')
-    const entries = Object.entries(perTeam)
-    if (entries.length === 0) return toast('لا يوجد حضور مسجّل لهذه الفقرة', 'warn')
+    if (!session) return
     setCommitting(true)
     try {
-      const totalMembers = participants.length
-      for (const [teamId, agg] of entries) {
-        const teamMembers = participants.filter(p => p.teamId === teamId).length
-        await upsert('attendanceResults', `${itemId}__${teamId}`, {
-          itemId,
-          itemTitle: item?.title || '',
-          teamId,
-          teamName: teams.find(t => t.id === teamId)?.name || '',
-          points: Math.round(agg.pts * 100) / 100,
-          completedCount: agg.count,
-          totalCount: teamMembers || totalMembers,
+      for (const t of teams) {
+        const b = teamScores[t.id]
+        if (!b || b.present === 0) continue
+        await upsert('attendanceResults', `${session.id}__${t.id}`, {
+          itemId: session.id, itemTitle: 'جلسة حضور',
+          teamId: t.id, teamName: t.name,
+          points: b.points, completedCount: b.present, totalCount: b.total,
           completionTime: new Date().toISOString(),
         })
       }
       toast('تم إضافة الدرجات للفرق ✓', 'ok')
-    } catch (e) {
-      toast('خطأ أثناء الإضافة: ' + e.message, 'err')
-    } finally {
-      setCommitting(false)
-    }
+    } catch (e) { toast('خطأ: ' + e.message, 'err') }
+    finally { setCommitting(false) }
   }
+
+  const periodValidation = validateSessionPeriods(periods)
+  const noSession = !session || session.status === 'ended'
 
   return (
     <div className="page">
       <Header title="تسجيل الحضور" />
 
-      {!scanning ? (
-        <>
-          <div className="card" style={{ marginBottom: 14 }}>
-            <div className="field">
-              <label>الفقرة</label>
-              <select value={itemId} onChange={e => setItemId(e.target.value)}>
-                <option value="">— اختر الفقرة —</option>
-                {program.map(p => <option key={p.id} value={p.id}>{p.day} — {p.title}</option>)}
-              </select>
+      {/* ============ NO ACTIVE SESSION → admin sets up & starts ============ */}
+      {noSession && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <h3 className="section-title" style={{ marginTop: 0 }}>إنشاء جلسة حضور</h3>
+          <p className="subtle" style={{ marginBottom: 12 }}>
+            حدّد مدة ونقاط كل فترة. النقاط = إجمالي نقاط الفريق للفترة، وتتوزّع على الحاضرين حسب عدد أعضاء الفريق.
+          </p>
+          <div className="att-periods">
+            <div className="att-row att-head att-row-session">
+              <span>الفترة</span><span>المدة (دقائق)</span><span>نقاط الفريق</span><span></span>
             </div>
-
-            {itemId && (
-              <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '8px 0' }}>
-                  <label style={{ fontWeight: 800, color: 'var(--maroon)' }}>فترات الحضور والدرجات</label>
-                  <button className="btn ghost" style={{ padding: '5px 10px', fontSize: 13 }} onClick={addRow}>+ فترة</button>
-                </div>
-                <div className="att-periods">
-                  <div className="att-row att-head">
-                    <span>من</span><span>إلى</span><span>الدرجة</span><span></span>
-                  </div>
-                  {periods.map((p, i) => (
-                    <div className="att-row" key={i}>
-                      <input type="time" value={p.from} onChange={e => setRow(i, { from: e.target.value })} />
-                      <input type="time" value={p.to} onChange={e => setRow(i, { to: e.target.value })} />
-                      <input type="number" value={p.points} onChange={e => setRow(i, { points: e.target.value })} />
-                      <button className="btn ghost" style={{ padding: '4px 6px', color: 'var(--red)' }} onClick={() => delRow(i)} disabled={periods.length <= 1}>
-                        <Icon name="trash" size={14} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                {!periodValidation.ok && <div className="att-warn">⚠️ {periodValidation.error}</div>}
-
-                <button className="btn full" style={{ marginTop: 12 }} onClick={start} disabled={!periodValidation.ok}>
-                  <Icon name="scan" size={18} /> بدء التسجيل
+            {periods.map((p, i) => (
+              <div className="att-row att-row-session" key={i}>
+                <span style={{ fontWeight: 800, color: 'var(--maroon)' }}>{i + 1}</span>
+                <input type="number" min="1" value={p.minutes} onChange={e => setRow(i, { minutes: e.target.value })} />
+                <input type="number" min="0" value={p.points} onChange={e => setRow(i, { points: e.target.value })} />
+                <button className="btn ghost" style={{ padding: '4px 6px', color: 'var(--red)' }} onClick={() => delRow(i)} disabled={periods.length <= 1}>
+                  <Icon name="trash" size={14} />
                 </button>
-                <p className="subtle" style={{ textAlign: 'center', marginTop: 8 }}>
-                  الكاميرا هتفتح وتنتقل الدرجة أوتوماتيك حسب الوقت
-                </p>
-              </>
-            )}
+              </div>
+            ))}
           </div>
-
-          {itemId && Object.keys(perTeam).length > 0 && (
-            <>
-              <h3 className="section-title">حضور هذه الفقرة</h3>
-              {teams.filter(t => perTeam[t.id]).sort((a,b)=>a.order-b.order).map(t => (
-                <div key={t.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderInlineStart: `5px solid ${t.color}` }}>
-                  <span style={{ fontWeight: 800 }}>{t.name}</span>
-                  <span className="subtle">{perTeam[t.id].count} حضور • {perTeam[t.id].pts} نقطة</span>
-                </div>
-              ))}
-              <button className="btn gold full" style={{ marginTop: 12 }} onClick={commitToTeams} disabled={committing}>
-                {committing ? 'جارٍ الإضافة...' : '➕ إضافة الدرجات للفرق'}
+          <button className="btn ghost" style={{ marginTop: 8, fontSize: 13 }} onClick={addRow}>+ فترة</button>
+          {!periodValidation.ok && <div className="att-warn">⚠️ {periodValidation.error}</div>}
+          {session && session.status === 'ended' && (
+            <div className="card" style={{ background: 'rgba(178,58,47,.08)', marginTop: 12, marginBottom: 0 }}>
+              <div className="subtle">آخر جلسة انتهت. تقدر تضيف درجاتها للفرق قبل ما تبدأ جلسة جديدة.</div>
+              <button className="btn gold full" style={{ marginTop: 8 }} onClick={commitToTeams} disabled={committing}>
+                {committing ? 'جارٍ الإضافة...' : '➕ إضافة درجات آخر جلسة للفرق'}
               </button>
-              <p className="subtle" style={{ textAlign: 'center', marginTop: 8, fontSize: 12 }}>
-                بيجمع درجات الحضور ويضيفها لنتائج الفرق. تقدر تدوسه أكتر من مرة، هيحدّث القيم مش يكررها.
-              </p>
-            </>
+            </div>
           )}
-        </>
-      ) : (
-        <>
-          {/* status circle */}
-          <div className="att-status-wrap">
-            <StatusCircle status={status} periods={periods} />
-          </div>
+          <button className="btn full" style={{ marginTop: 12 }} onClick={startSession} disabled={!periodValidation.ok}>
+            <Icon name="scan" size={18} /> بدء الجلسة
+          </button>
+        </div>
+      )}
 
-          {status.state === 'ended' && (
+      {/* ============ ACTIVE SESSION → central status + camera ============ */}
+      {session && session.status === 'active' && (
+        <>
+          <SessionStatus status={status} periods={session.periods} />
+
+          {status.state === 'ended' ? (
             <div className="card" style={{ textAlign: 'center', marginTop: 8 }}>
               <div style={{ fontSize: 40 }}>⛔</div>
-              <div style={{ fontWeight: 800, color: 'var(--red)' }}>انتهى تسجيل الحضور</div>
-              <div className="subtle">لا يمكن تسجيل حضور جديد — الكاميرا مفتوحة للمعاينة فقط</div>
+              <div style={{ fontWeight: 800, color: 'var(--red)' }}>انتهت الجلسة</div>
+              <div className="subtle">تسجيل الحضور مغلق</div>
             </div>
-          )}
-
-          {/* Reader is ALWAYS mounted while scanning (like the login page),
-              so the camera opens regardless of the time window. Time only
-              controls the grade / whether a scan is accepted. */}
-          <div id="qr-reader" style={{ width: '100%', borderRadius: 18, overflow: 'hidden', border: '2px solid var(--gold)', marginTop: 8, minHeight: camFailed ? 0 : 240, opacity: status.state === 'ended' ? 0.5 : 1 }} />
-          {camFailed && (
-            <div className="card" style={{ textAlign: 'center', marginTop: 8 }}>
-              <div style={{ fontSize: 36 }}>📷</div>
-              <div style={{ fontWeight: 800, color: 'var(--red)', marginBottom: 4 }}>تعذّر فتح الكاميرا</div>
-              <div className="subtle" style={{ marginBottom: 12 }}>تأكد إنك سامح للموقع باستخدام الكاميرا، وإن مفيش تطبيق تاني ماسكها</div>
-              <button className="btn full" onClick={retryCamera}>إعادة المحاولة</button>
-            </div>
-          )}
-
-          {/* live per-team tally */}
-          {Object.keys(perTeam).length > 0 && (
-            <div className="card" style={{ marginTop: 12 }}>
-              {teams.filter(t => perTeam[t.id]).sort((a,b)=>a.order-b.order).map(t => (
-                <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
-                  <span style={{ fontWeight: 700, color: t.color }}>{t.name}</span>
-                  <span style={{ fontWeight: 800 }}>{perTeam[t.id].count} • {perTeam[t.id].pts} ن</span>
+          ) : (
+            <>
+              <div id="qr-reader" style={{ width: '100%', borderRadius: 18, overflow: 'hidden', border: '2px solid var(--gold)', marginTop: 8, minHeight: camFailed ? 0 : 240 }} />
+              {camFailed && (
+                <div className="card" style={{ textAlign: 'center', marginTop: 8 }}>
+                  <div style={{ fontSize: 36 }}>📷</div>
+                  <div style={{ fontWeight: 800, color: 'var(--red)', marginBottom: 4 }}>تعذّر فتح الكاميرا</div>
+                  <div className="subtle" style={{ marginBottom: 12 }}>تأكد من إذن الكاميرا وإن مفيش تطبيق تاني ماسكها</div>
+                  <button className="btn full" onClick={retryCamera}>إعادة المحاولة</button>
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
 
-          {Object.keys(perTeam).length > 0 && (
-            <button className="btn gold full" style={{ marginTop: 12 }} onClick={commitToTeams} disabled={committing}>
-              {committing ? 'جارٍ الإضافة...' : '➕ إضافة الدرجات للفرق'}
-            </button>
-          )}
-          <button className="btn red full" style={{ marginTop: 14 }} onClick={stop}>إنهاء الماسح</button>
+          {/* live team tally */}
+          <div className="card" style={{ marginTop: 12 }}>
+            <div style={{ fontWeight: 800, color: 'var(--maroon)', marginBottom: 8 }}>الحضور المباشر</div>
+            {teams.slice().sort((a, b) => a.order - b.order).map(t => {
+              const b = teamScores[t.id] || { present: 0, total: 0, points: 0 }
+              return (
+                <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid rgba(0,0,0,.05)' }}>
+                  <span style={{ fontWeight: 700, color: t.color }}>{t.name}</span>
+                  <span style={{ fontWeight: 800 }}>{b.present}/{b.total} • {b.points} ن</span>
+                </div>
+              )
+            })}
+          </div>
+
+          <button className="btn red full" style={{ marginTop: 14 }} onClick={endSession}>إنهاء الجلسة</button>
         </>
       )}
     </div>
   )
 }
 
-function StatusCircle({ status, periods }) {
-  let big, label, color, sub
+function SessionStatus({ status, periods }) {
+  let label, big, color, sub
   if (status.state === 'before') {
-    big = '⏳'; label = 'لم يبدأ بعد'; color = 'var(--muted)'
-    sub = `يبدأ ${fmtClock(sortPeriods(periods)[0].from)}`
+    label = 'الجلسة تبدأ'; big = fmtRemaining(status.remainingMs); color = 'var(--muted)'; sub = 'قبل البداية'
   } else if (status.state === 'ended') {
-    big = '⛔'; label = 'انتهى'; color = 'var(--red)'; sub = 'تم إغلاق التسجيل'
-  } else if (status.gap) {
-    big = '⏸'; label = 'بين الفترات'; color = 'var(--gold)'; sub = '0 نقطة حالياً'
+    label = 'انتهت الجلسة'; big = '—'; color = 'var(--red)'; sub = 'مغلقة'
+  } else if (status.state === 'active') {
+    label = `الفترة ${status.periodIndex + 1} من ${periods.length}`
+    big = fmtRemaining(status.remainingMs); color = 'var(--green)'
+    sub = `${status.periodPoints} نقطة للفريق • باقي على الفترة الجاية`
   } else {
-    big = status.points; label = 'الدرجة الحالية'; color = 'var(--green)'
-    sub = `الفترة ${status.activeIndex + 1} • تنتهي ${fmtClock(minToHHMM(status.endsAtMin))}`
+    label = 'لا توجد جلسة'; big = '—'; color = 'var(--muted)'; sub = ''
   }
   return (
-    <div className="att-circle" style={{ borderColor: color }}>
-      <div className="att-circle-big" style={{ color }}>{big}</div>
-      <div className="att-circle-label">{label}</div>
-      <div className="att-circle-sub">{sub}</div>
+    <div className="sess-status" style={{ borderColor: color }}>
+      <div className="sess-status-label">{label}</div>
+      <div className="sess-status-big" style={{ color }}>{big}</div>
+      <div className="sess-status-sub">{sub}</div>
+      {periods && periods.length > 0 && status.state === 'active' && (
+        <div className="sess-dots">
+          {periods.map((p, i) => (
+            <span key={i} className={'sess-dot' + (i === status.periodIndex ? ' on' : i < status.periodIndex ? ' done' : '')} />
+          ))}
+        </div>
+      )}
     </div>
   )
-}
-
-function minToHHMM(mins) {
-  if (mins == null) return ''
-  const h = Math.floor(mins / 60), m = Math.round(mins % 60)
-  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`
 }
