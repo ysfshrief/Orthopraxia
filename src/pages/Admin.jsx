@@ -14,6 +14,7 @@ import AdminOverview from './admin/AdminOverview'
 import AdminJudges from './admin/AdminJudges'
 import AdminMainVideo from './admin/AdminMainVideo'
 import AdminSecretFriend from './admin/AdminSecretFriend'
+import AdminLibrary from './admin/AdminLibrary'
 
 const SECTIONS = [
   { key: 'overview', label: 'نظرة عامة', icon: 'grid' },
@@ -22,6 +23,7 @@ const SECTIONS = [
   { key: 'judges', label: 'الحكام', icon: 'trophy' },
   { key: 'results', label: 'الحضور والنقاط', icon: 'trophy' },
   { key: 'mainvideo', label: 'Main Video', icon: 'video' },
+  { key: 'library', label: 'الصلاة والترانيم', icon: 'card' },
   { key: 'secretfriend', label: 'الصديق الخفي', icon: 'quiz' },
   { key: 'notifications', label: 'الإشعارات', icon: 'bell' },
   { key: 'settings', label: 'الإعدادات', icon: 'gear' },
@@ -31,6 +33,7 @@ const CMP = {
   teams: AdminTeams, participants: AdminParticipants, results: AdminResults,
   settings: AdminSettings, notifications: AdminNotifications,
   judges: AdminJudges, mainvideo: AdminMainVideo, secretfriend: AdminSecretFriend,
+  library: AdminLibrary,
 }
 
 export default function Admin() {
@@ -158,6 +161,7 @@ function AdminMobile({ mSection, setMSection, stats, results }) {
     { key: 'judges', label: 'الحكام', icon: 'trophy' },
     { key: 'results', label: 'الحضور والنقاط', icon: 'trophy' },
     { key: 'mainvideo', label: 'Main Video', icon: 'video' },
+    { key: 'library', label: 'الصلاة والترانيم', icon: 'card' },
     { key: 'secretfriend', label: 'الصديق الخفي', icon: 'quiz' },
     { key: 'notifications', label: 'الإشعارات', icon: 'bell' },
     { key: 'settings', label: 'الإعدادات', icon: 'gear' },

@@ -429,3 +429,11 @@ input, select, textarea { font-family: inherit; font-size: 16px; }
 @media (min-width: 1024px) {
   .sess-status-big { font-size: 72px; }
 }
+
+/* ===== Admin library manager ===== */
+.lib-admin-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.lib-admin-col { margin: 0; }
+.lib-admin-item { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; background: #fffdf8; border: 1px solid rgba(201,154,58,.25); }
+@media (min-width: 1024px) {
+  .lib-admin-grid { grid-template-columns: 1fr 1fr; }
+}
