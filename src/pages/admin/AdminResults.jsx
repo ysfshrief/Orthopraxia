@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { subscribe, update, remove, create } from '../../lib/store'
 import { useData } from '../../context/DataContext'
 import { useToast, Modal, Header } from '../../components/UI'
+import { exportTeamScores } from '../../lib/exportBackup'
 import Icon from '../../components/Icons'
 
 export default function AdminResults({ back, embedded }) {
@@ -55,6 +56,12 @@ export default function AdminResults({ back, embedded }) {
   return (
     <div className="page">
       {!embedded && <Header title="الحضور والنقاط" back={back} />}
+
+      {/* Export backup — Excel of team scores. Pure client-side, no quota cost. */}
+      <button className="btn gold full backup-btn" style={{ marginBottom: 16 }}
+        onClick={() => { try { exportTeamScores(standings); toast('تم تنزيل ملف الباك أب ✓', 'ok') } catch (e) { toast('تعذّر التصدير', 'err') } }}>
+        <Icon name="card" size={18} /> Export Backup (Excel — درجات الفرق)
+      </button>
 
       {/* ===== Admin manual team points control ===== */}
       <h3 className="section-title" style={{ marginTop: 0 }}>التحكم في نقاط الفرق</h3>

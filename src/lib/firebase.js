@@ -1,5 +1,8 @@
 import { initializeApp } from 'firebase/app'
-import { getFirestore } from 'firebase/firestore'
+import {
+  getFirestore, initializeFirestore,
+  persistentLocalCache, persistentMultipleTabManager
+} from 'firebase/firestore'
 import { getAuth } from 'firebase/auth'
 
 const cfg = {
@@ -20,7 +23,18 @@ let auth = null
 
 if (!DEMO_MODE) {
   const app = initializeApp(cfg)
-  db = getFirestore(app)
+  // QUOTA-SAVER: enable an on-device persistent cache. Returning visitors and
+  // page refreshes are served from local cache instead of re-reading every
+  // document from the server, which sharply cuts Firestore read usage during
+  // a busy event. Live updates and writes are unaffected. Falls back to the
+  // default in-memory Firestore if the browser blocks persistence.
+  try {
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+    })
+  } catch (e) {
+    db = getFirestore(app)
+  }
   auth = getAuth(app)
 }
 

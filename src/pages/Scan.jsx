@@ -74,9 +74,15 @@ export default function Scan() {
     toast('انتهت الجلسة', 'warn')
   }
 
-  // auto-end when time runs out (any device that notices persists it once)
+  // auto-end when time runs out. Guarded so it persists the 'ended' flip
+  // AT MOST ONCE (a ref latch), instead of re-writing on every snapshot —
+  // which previously multiplied Firestore writes across every admin device.
+  const endedWritten = useRef(false)
   useEffect(() => {
-    if (session && session.status === 'active' && status.state === 'ended') {
+    if (!session) return
+    if (session.status !== 'active') { endedWritten.current = false; return }
+    if (status.state === 'ended' && !endedWritten.current) {
+      endedWritten.current = true
       saveSession({ ...session, status: 'ended', endedAt: new Date().toISOString() })
     }
   }, [status.state, session])
@@ -145,9 +151,14 @@ export default function Scan() {
     if (!person) { beep('err'); toast('✕ QR غير صالح أو غير مسجّل', 'err'); return }
 
     const teamName = teams.find(x => x.id === person.teamId)?.name || ''
+    // Check the already-loaded realtime scans list (no extra Firestore read).
+    // If this person is already recorded in this session, skip the write —
+    // costs zero quota for repeat scans.
+    const already = scans.some(s => s.id === `${session.id}__${person.id}`)
     const res = await recordSessionScan({
       sessionId: session.id, participantId: person.id, personName: person.name,
-      teamId: person.teamId, teamName, periodIndex: st.periodIndex
+      teamId: person.teamId, teamName, periodIndex: st.periodIndex,
+      knownDuplicate: already
     })
     if (res.duplicate) { beep('err'); toast(`⚠ ${person.name} — تم تسجيله بالفعل في هذه الجلسة`, 'err'); return }
     if (res.error) { beep('err'); toast('خطأ في الحفظ: ' + res.error, 'err'); return }

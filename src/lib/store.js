@@ -288,7 +288,7 @@ export function subscribeSessionScans(cb) {
   time at scan moment. Grade share is derived later from team size, so we store
   the period the person attended in, not a pre-baked per-person number.
 */
-export async function recordSessionScan({ sessionId, participantId, personName, teamId, teamName, periodIndex }) {
+export async function recordSessionScan({ sessionId, participantId, personName, teamId, teamName, periodIndex, knownDuplicate }) {
   const docId = `${sessionId}__${participantId}`
   const payload = {
     sessionId, participantId, personName: personName || '',
@@ -301,14 +301,18 @@ export async function recordSessionScan({ sessionId, participantId, personName, 
     arr.push(payload); lsSet('sessionScans', arr)
     return { duplicate: false, record: payload }
   }
+  // QUOTA-SAVER: the caller already knows (from the realtime scans list it
+  // holds) whether this person was scanned → if so we skip the write entirely,
+  // costing ZERO Firestore operations for a repeat scan.
+  if (knownDuplicate) return { duplicate: true }
   try {
-    return await runTransaction(db, async (tx) => {
-      const ref = doc(db, 'sessionScans', docId)
-      const snap = await tx.get(ref)
-      if (snap.exists()) return { duplicate: true }
-      tx.set(ref, payload)
-      return { duplicate: false, record: payload }
-    })
+    // Single write, NO transaction (no extra read). The docId is deterministic
+    // (sessionId__participantId), so even if two devices write the same person
+    // at once, they write the SAME document — Firestore keeps one record, never
+    // a duplicate. This halves the per-scan cost vs a read+write transaction
+    // and keeps us safely inside the free Spark daily quota.
+    await setDoc(doc(db, 'sessionScans', docId), payload)
+    return { duplicate: false, record: payload }
   } catch (e) {
     return { error: e.message }
   }
