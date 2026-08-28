@@ -2,7 +2,8 @@ import { useEffect, useState, useRef, useMemo } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
 import {
   subscribe, upsert, subscribeSession, saveSession,
-  subscribeSessionScans, recordSessionScan
+  subscribeSessionScans, recordSessionScan,
+  recordLocalScan, getLocalScans, uploadLocalScans, clearLocalScans, getSessionScansOnce
 } from '../lib/store'
 import { useData } from '../context/DataContext'
 import { useToast, Header } from '../components/UI'
@@ -13,13 +14,16 @@ import {
 import Icon from '../components/Icons'
 
 /*
-  Central attendance SESSION scanner.
-  - One shared session (settings/attendanceSession) drives every device.
-  - Current period + remaining time are DERIVED from the stored startedAt,
-    so refresh / late-open / multi-device all agree.
-  - Each person is scanned ONCE per session (docId sessionId__participantId,
-    transaction-guarded → no duplicates even with concurrent admins).
-  - Team score = periodPoints * (present / totalMembers), computed live.
+  Central attendance SESSION scanner with TWO modes:
+
+  • Online (default): scans write to Firestore live; every admin device sees
+    the same tally in realtime.
+
+  • Local / Offline (zero-quota): each device records scans to its OWN
+    localStorage — NO Firestore reads/writes during scanning at all. At the
+    end the admin presses "رفع النتائج" to push this device's scans once, in a
+    single batch. Deterministic docIds dedupe the same person scanned on
+    multiple devices. Best when you want to avoid the Firestore free quota.
 */
 
 export default function Scan() {
@@ -27,14 +31,29 @@ export default function Scan() {
   const toast = useToast()
   const [session, setSession] = useState(null)
   const [scans, setScans] = useState([])
+  const [localScans, setLocalScans] = useState([])
   const [periods, setPeriods] = useState(defaultSessionPeriods())
+  const [offlineMode, setOfflineMode] = useState(true) // default to zero-quota
   const [now, setNow] = useState(Date.now())
   const [camFailed, setCamFailed] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const qrRef = useRef(null)
   const lastScan = useRef({ code: '', t: 0 })
 
   useEffect(() => subscribeSession(setSession), [])
-  useEffect(() => subscribeSessionScans(setScans), [])
+  // Only subscribe to the (quota-costing) online scans when NOT in offline mode.
+  useEffect(() => {
+    if (offlineMode) { setScans([]); return }
+    return subscribeSessionScans(setScans)
+  }, [offlineMode])
+
+  // refresh local scans from localStorage on a light interval + on change event
+  useEffect(() => {
+    const refresh = () => setLocalScans(getLocalScans(session?.id))
+    refresh()
+    window.addEventListener('ortho-change', refresh)
+    return () => window.removeEventListener('ortho-change', refresh)
+  }, [session])
 
   // shared clock tick (drives period display derived from central startedAt)
   useEffect(() => {
@@ -151,9 +170,19 @@ export default function Scan() {
     if (!person) { beep('err'); toast('✕ QR غير صالح أو غير مسجّل', 'err'); return }
 
     const teamName = teams.find(x => x.id === person.teamId)?.name || ''
-    // Check the already-loaded realtime scans list (no extra Firestore read).
-    // If this person is already recorded in this session, skip the write —
-    // costs zero quota for repeat scans.
+
+    if (offlineMode) {
+      // Zero-quota: record on THIS device only. Nothing hits Firestore.
+      const res = recordLocalScan({
+        sessionId: session.id, participantId: person.id, personName: person.name,
+        teamId: person.teamId, teamName, periodIndex: st.periodIndex
+      })
+      if (res.duplicate) { beep('err'); toast(`⚠ ${person.name} — مسجّل بالفعل على هذا الجهاز`, 'err'); return }
+      beep('ok'); toast(`✓ تم تسجيل ${person.name} محلياً (فترة ${st.periodIndex + 1})`, 'ok', 1600)
+      return
+    }
+
+    // Online mode: check already-loaded realtime scans (no extra read), then write.
     const already = scans.some(s => s.id === `${session.id}__${person.id}`)
     const res = await recordSessionScan({
       sessionId: session.id, participantId: person.id, personName: person.name,
@@ -165,15 +194,28 @@ export default function Scan() {
     beep('ok'); toast(`✓ تم تسجيل ${person.name} (فترة ${st.periodIndex + 1})`, 'ok', 1800)
   }
 
-  // ----- live scores -----
+  // ----- live scores (from local scans in offline mode, else online) -----
+  const activeScans = offlineMode ? localScans : scans
   const sessionScans = useMemo(
-    () => scans.filter(s => session && s.sessionId === session.id),
-    [scans, session]
+    () => activeScans.filter(s => session && s.sessionId === session.id),
+    [activeScans, session]
   )
   const teamScores = useMemo(
     () => computeTeamScores(sessionScans, teams, participants, session?.periods || []),
     [sessionScans, teams, participants, session]
   )
+
+  // upload this device's local scans (offline mode) — one batched write
+  const uploadLocal = async () => {
+    if (!session) return
+    setUploading(true)
+    try {
+      const res = await uploadLocalScans(session.id)
+      if (res.error) { toast('خطأ في الرفع: ' + res.error, 'err'); return }
+      toast(`تم رفع ${res.uploaded} حضور ✓`, 'ok')
+    } catch (e) { toast('خطأ: ' + e.message, 'err') }
+    finally { setUploading(false) }
+  }
 
   // commit final results into attendanceResults for the admin standings
   const [committing, setCommitting] = useState(false)
@@ -181,8 +223,17 @@ export default function Scan() {
     if (!session) return
     setCommitting(true)
     try {
+      // In offline mode, first push this device's scans, then aggregate from
+      // the MERGED set (all devices) so no team is undercounted. In online mode
+      // teamScores already reflects the live merged data.
+      let scores = teamScores
+      if (offlineMode) {
+        await uploadLocalScans(session.id)
+        const merged = await getSessionScansOnce(session.id)
+        scores = computeTeamScores(merged, teams, participants, session?.periods || [])
+      }
       for (const t of teams) {
-        const b = teamScores[t.id]
+        const b = scores[t.id]
         if (!b || b.present === 0) continue
         await upsert('attendanceResults', `${session.id}__${t.id}`, {
           itemId: session.id, itemTitle: 'جلسة حضور',
@@ -209,6 +260,21 @@ export default function Scan() {
           <h3 className="section-title" style={{ marginTop: 0 }}>إنشاء جلسة حضور</h3>
           <p className="subtle" style={{ marginBottom: 12 }}>
             حدّد مدة ونقاط كل فترة. النقاط = إجمالي نقاط الفريق للفترة، وتتوزّع على الحاضرين حسب عدد أعضاء الفريق.
+          </p>
+
+          {/* Scan mode: offline (zero-quota) vs online (live sync) */}
+          <div className="scan-mode">
+            <button className={'scan-mode-btn' + (offlineMode ? ' on' : '')} onClick={() => setOfflineMode(true)}>
+              📴 محلي (بدون إنترنت/كوتا)
+            </button>
+            <button className={'scan-mode-btn' + (!offlineMode ? ' on' : '')} onClick={() => setOfflineMode(false)}>
+              🌐 أونلاين (مزامنة مباشرة)
+            </button>
+          </div>
+          <p className="subtle" style={{ fontSize: 12, marginBottom: 12 }}>
+            {offlineMode
+              ? 'الوضع المحلي: كل جهاز يسجّل عنده بدون أي استهلاك كوتا. في الآخر اضغط "رفع النتائج" لرفع حضور الجهاز مرة واحدة.'
+              : 'الوضع الأونلاين: كل جهاز يكتب مباشرة وكل الأجهزة تشوف نفس الحضور لحظياً (بيستهلك كوتا).'}
           </p>
           <div className="att-periods">
             <div className="att-row att-head att-row-session">
@@ -279,6 +345,20 @@ export default function Scan() {
               )
             })}
           </div>
+
+          {offlineMode && (
+            <div className="card" style={{ marginTop: 12, background: 'rgba(201,154,58,.08)' }}>
+              <div className="subtle" style={{ fontSize: 12, marginBottom: 8 }}>
+                📴 وضع محلي — {sessionScans.length} حضور على هذا الجهاز. اضغط "رفع النتائج" في الآخر (كل جهاز يرفع مرة واحدة).
+              </div>
+              <button className="btn full" onClick={uploadLocal} disabled={uploading || sessionScans.length === 0}>
+                {uploading ? 'جارٍ الرفع...' : '⬆️ رفع النتائج (رفعة واحدة)'}
+              </button>
+              <button className="btn gold full" style={{ marginTop: 8 }} onClick={commitToTeams} disabled={committing}>
+                {committing ? 'جارٍ الإضافة...' : '➕ إضافة الدرجات للفرق'}
+              </button>
+            </div>
+          )}
 
           <button className="btn red full" style={{ marginTop: 14 }} onClick={endSession}>إنهاء الجلسة</button>
         </>

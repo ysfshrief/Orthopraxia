@@ -437,3 +437,12 @@ input, select, textarea { font-family: inherit; font-size: 16px; }
 @media (min-width: 1024px) {
   .lib-admin-grid { grid-template-columns: 1fr 1fr; }
 }
+
+/* ===== Scan mode toggle ===== */
+.scan-mode { display: flex; gap: 8px; margin-bottom: 8px; }
+.scan-mode-btn {
+  flex: 1; padding: 12px 8px; border-radius: 12px; border: 2px solid rgba(201,154,58,.4);
+  background: #fffdf8; font-weight: 700; font-size: 13px; cursor: pointer; color: var(--ink);
+  transition: all .15s;
+}
+.scan-mode-btn.on { border-color: var(--green); background: rgba(62,107,79,.12); color: var(--green); }

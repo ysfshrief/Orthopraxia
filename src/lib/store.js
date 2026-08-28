@@ -282,6 +282,86 @@ export function subscribeSessionScans(cb) {
   })
 }
 
+/* ===================== LOCAL (OFFLINE) SCAN MODE ===================== *
+   Zero-quota scanning. Each device records scans to its OWN localStorage,
+   NOT Firestore — so scanning consumes no reads/writes at all. At the end
+   the admin presses "رفع النتائج"; only then do we push to Firestore, once,
+   in a single batch, deduped by docId (sessionId__participantId) so the same
+   person scanned on two devices counts once.
+
+   These functions are localStorage-only and identical in both modes.
+*/
+const LOCAL_SCANS_KEY = 'localScans'
+
+export function getLocalScans(sessionId) {
+  const all = lsGet(LOCAL_SCANS_KEY)
+  return sessionId ? all.filter(s => s.sessionId === sessionId) : all
+}
+
+// returns { duplicate } — dedup is per-device by sessionId__participantId
+export function recordLocalScan({ sessionId, participantId, personName, teamId, teamName, periodIndex }) {
+  const docId = `${sessionId}__${participantId}`
+  const all = lsGet(LOCAL_SCANS_KEY)
+  if (all.some(s => s.id === docId)) return { duplicate: true }
+  all.push({
+    id: docId, sessionId, participantId, personName: personName || '',
+    teamId: teamId || '', teamName: teamName || '',
+    periodIndex: Number(periodIndex), scanTime: new Date().toISOString(),
+  })
+  lsSet(LOCAL_SCANS_KEY, all)
+  return { duplicate: false }
+}
+
+export function clearLocalScans(sessionId) {
+  const all = lsGet(LOCAL_SCANS_KEY)
+  lsSet(LOCAL_SCANS_KEY, sessionId ? all.filter(s => s.sessionId !== sessionId) : [])
+}
+
+/*
+  One-time fetch of all uploaded scans for a session (no live listener).
+  Used by the offline-mode commit to aggregate the MERGED set from all devices
+  after they've uploaded — so team scores count every device's scans, deduped.
+*/
+export async function getSessionScansOnce(sessionId) {
+  if (DEMO_MODE) {
+    return lsGet('sessionScans').filter(s => s.sessionId === sessionId)
+  }
+  const q = query(collection(db, 'sessionScans'), where('sessionId', '==', sessionId))
+  const snap = await getDocs(q)
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+}
+
+/*
+  Upload this device's local scans to Firestore in ONE batch.
+  Deterministic docIds mean re-uploads / cross-device duplicates collapse into
+  one record. Returns { uploaded, error }.
+  In DEMO_MODE it merges into the local 'sessionScans' store instead.
+*/
+export async function uploadLocalScans(sessionId) {
+  const mine = getLocalScans(sessionId)
+  if (mine.length === 0) return { uploaded: 0 }
+  if (DEMO_MODE) {
+    const arr = lsGet('sessionScans')
+    for (const s of mine) if (!arr.some(x => x.id === s.id)) arr.push(s)
+    lsSet('sessionScans', arr)
+    return { uploaded: mine.length }
+  }
+  try {
+    // Firestore batches cap at 500 ops; chunk to be safe.
+    let uploaded = 0
+    for (let i = 0; i < mine.length; i += 450) {
+      const chunk = mine.slice(i, i + 450)
+      const batch = writeBatch(db)
+      for (const s of chunk) batch.set(doc(db, 'sessionScans', s.id), s)
+      await batch.commit()
+      uploaded += chunk.length
+    }
+    return { uploaded }
+  } catch (e) {
+    return { error: e.message }
+  }
+}
+
 /*
   Record one session scan.
   The caller passes the periodIndex/points resolved from the CENTRAL session
